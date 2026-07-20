@@ -1,0 +1,53 @@
+{
+  "name": "feedback-assistant",
+  "version": "1.0.0",
+  "description": "macOS Desktop App for post-class learning feedback",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "start": "electron .",
+    "build:frontend": "cd frontend && npm run build",
+    "pack": "electron-builder --dir",
+    "dist": "npm run build:frontend && electron-builder"
+  },
+  "dependencies": {
+    "@google/genai": "^2.12.0",
+    "@resvg/resvg-js": "^2.6.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "https-proxy-agent": "^7.0.4",
+    "multer": "^1.4.5-lts.1",
+    "node-fetch": "^3.3.2",
+    "pdfkit": "^0.15.0"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.antigravity.feedbackassistant",
+    "productName": "反馈助手",
+    "asar": false,
+    "mac": {
+      "category": "public.app-category.education",
+      "target": [
+        "dir",
+        "dmg"
+      ],
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "backend/**/*",
+      "docs/**/*",
+      "frontend/dist/**/*",
+      "node_modules/**/*"
+    ],
+    "directories": {
+      "output": "release"
+    }
+  }
+}
