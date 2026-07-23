@@ -10,16 +10,26 @@ const CHINESE_FONT_PATH = '/System/Library/Fonts/Supplemental/Arial Unicode.ttf'
  * @param {Object} params
  * @param {string} params.studentName 学生姓名
  * @param {string} params.studentGrade 学生学段 (如 高一 / 初三(中考))
+ * @param {string} params.pdfBrandTitle 教师/机构署名 (如 彭老师语文名师工作室)
+ * @param {string} params.pdfHeaderTitle 自定义页眉标语 (默认 尘埃落定 · 始见星辰)
  * @param {string} params.feedbackText 反馈 Markdown 文本
  * @param {Buffer|string|Array} params.imageBuffer 知识点图片 Buffer 或 Base64 (支持多图数组)
  * @returns {Promise<Buffer>}
  */
-export function generateFeedbackPDF({ studentName, studentGrade, feedbackText, imageBuffer, imagesBase64 }) {
+export function generateFeedbackPDF({
+  studentName,
+  studentGrade,
+  pdfBrandTitle,
+  pdfHeaderTitle,
+  feedbackText,
+  imageBuffer,
+  imagesBase64
+}) {
   return new Promise((resolve, reject) => {
     try {
       const doc = new PDFDocument({
         size: 'A4',
-        margins: { top: 42, bottom: 45, left: 35, right: 35 },
+        margins: { top: 46, bottom: 50, left: 35, right: 35 },
         bufferPages: true
       });
 
@@ -34,31 +44,32 @@ export function generateFeedbackPDF({ studentName, studentGrade, feedbackText, i
 
       const pageWidth = 525;
       const startX = 35;
-      const PAGE_MAX_Y = 710;
+      const PAGE_MAX_Y = 705; // 预留底部空间避免触发跨页溢出
 
       const checkPageOverflow = (needHeight) => {
         if (doc.y + needHeight > PAGE_MAX_Y) {
           doc.addPage();
-          doc.y = 42;
+          doc.y = 46;
         }
       };
 
       // -------------------------------------------------------------
       // 1. 顶部 Header 优雅头卡
       // -------------------------------------------------------------
-      const topTitleY = 42;
-      const topTitleHeight = 62;
+      const topTitleY = 46;
+      const topTitleHeight = 64;
       
       doc.roundedRect(startX, topTitleY, pageWidth, topTitleHeight, 8).fill('#faf7f2');
       doc.roundedRect(startX, topTitleY, pageWidth, topTitleHeight, 8).strokeColor('#e5dfd3').lineWidth(1).stroke();
 
-      doc.fontSize(18).fillColor('#1e293b').text('语文课后学习反馈', startX + 16, topTitleY + 12);
+      const mainHeading = pdfBrandTitle && pdfBrandTitle.trim() ? pdfBrandTitle.trim() : '语文课后学习反馈';
+      doc.fontSize(16).fillColor('#1e293b').text(mainHeading, startX + 16, topTitleY + 12);
       
       const dateStr = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
       const gradeStr = studentGrade ? ` (${studentGrade})` : '';
       const nameText = `学员：${studentName || '未指定'}${gradeStr}`;
 
-      const badgeWidth = Math.min(230, nameText.length * 11 + 20);
+      const badgeWidth = Math.min(240, nameText.length * 11 + 20);
       doc.roundedRect(startX + 16, topTitleY + 36, badgeWidth, 18, 9).fill('#edf4ef');
       doc.roundedRect(startX + 16, topTitleY + 36, badgeWidth, 18, 9).strokeColor('#c2d6c6').lineWidth(0.8).stroke();
       doc.fontSize(9).fillColor('#2d4a34').text(nameText, startX + 24, topTitleY + 40);
@@ -101,7 +112,7 @@ export function generateFeedbackPDF({ studentName, studentGrade, feedbackText, i
       }
 
       // -------------------------------------------------------------
-      // 4. 渲染 16:9 2K 宽屏知识海报 (位于“课堂记录”与“课堂回顾”之间)
+      // 4. 渲染 16:9 2K 宽屏知识海报
       // -------------------------------------------------------------
       const imgBuffersToRender = parseImageBuffersList(imageBuffer, imagesBase64);
 
@@ -139,7 +150,7 @@ export function generateFeedbackPDF({ studentName, studentGrade, feedbackText, i
       }
 
       // -------------------------------------------------------------
-      // 5. AST 结构化块解析与智能分拆卡片 (解决授课内容过长切分杂乱)
+      // 5. AST 结构化块解析与智能分拆卡片
       // -------------------------------------------------------------
       const sections = parseSectionsAST(remainingLines);
 
@@ -148,18 +159,39 @@ export function generateFeedbackPDF({ studentName, studentGrade, feedbackText, i
       }
 
       // -------------------------------------------------------------
-      // 6. 全局居中页眉 Header
+      // 6. 统一绘制页眉 (Header) 与 页脚页码 (Footer)
+      //    在 bufferedPageRange 阶段遍历所有页面，彻底避免产生多余空白页！
       // -------------------------------------------------------------
+      const headerSlogan = pdfHeaderTitle && pdfHeaderTitle.trim() ? pdfHeaderTitle.trim() : '尘埃落定 · 始见星辰';
       const pages = doc.bufferedPageRange();
-      for (let i = 0; i < pages.count; i++) {
+      const totalPageCount = pages.count;
+
+      for (let i = 0; i < totalPageCount; i++) {
         doc.switchToPage(i);
 
-        // 页眉 Header：居中显示“尘埃落定 · 始见星辰” (9.5pt)
-        doc.fontSize(9.5).fillColor('#64748b').text('尘埃落定 · 始见星辰', startX, 22, {
+        // A. 页眉：顶部线 + 标语
+        doc.fontSize(9).fillColor('#64748b').text(headerSlogan, startX, 22, {
           width: pageWidth,
           align: 'center'
         });
-        doc.strokeColor('#e2e8f0').lineWidth(0.6).moveTo(startX, 35).lineTo(startX + pageWidth, 35).stroke();
+        doc.strokeColor('#cbd5e1').lineWidth(0.5).moveTo(startX, 34).lineTo(startX + pageWidth, 34).stroke();
+
+        // B. 页脚：页脚线 + 品牌 Slogan + 动态页码
+        const footerY = 812;
+        doc.strokeColor('#cbd5e1').lineWidth(0.5).moveTo(startX, footerY - 10).lineTo(startX + pageWidth, footerY - 10).stroke();
+
+        // 左下角/中央品牌 Slogan
+        doc.fontSize(8.5).fillColor('#94a3b8').text('尘埃落定 · 始见星辰', startX, footerY, {
+          width: pageWidth / 2,
+          align: 'left'
+        });
+
+        // 右下角精准动态页码：— 第 X 页 / 共 Y 页 —
+        const pageNumText = `— 第 ${i + 1} 页 / 共 ${totalPageCount} 页 —`;
+        doc.fontSize(8.5).fillColor('#64748b').text(pageNumText, startX + pageWidth / 2, footerY, {
+          width: pageWidth / 2,
+          align: 'right'
+        });
       }
 
       doc.end();
@@ -176,8 +208,8 @@ export function generateFeedbackPDF({ studentName, studentGrade, feedbackText, i
  */
 function parseImageBuffersList(imageBuffer, imagesBase64) {
   const result = [];
-
   const rawList = [];
+
   if (Array.isArray(imagesBase64) && imagesBase64.length > 0) {
     rawList.push(...imagesBase64);
   } else if (imageBuffer) {
@@ -301,7 +333,7 @@ function parseSectionsAST(lines) {
 }
 
 /**
- * 渲染宣纸 AST 顶级主卡片（针对过长的“授课内容”，支持智能按组切拆分卡，防止杂乱断行）
+ * 渲染宣纸 AST 顶级主卡片
  */
 function renderLiteratiCardAST(doc, startX, pageWidth, sec, checkPageOverflow) {
   const title = sec.title || '';
@@ -309,7 +341,6 @@ function renderLiteratiCardAST(doc, startX, pageWidth, sec, checkPageOverflow) {
 
   if (lines.length === 0) return;
 
-  // 如果“授课内容”项目极多 (>6条)，按逻辑切分为子卡片渲染，保证排版极其工整！
   const lineGroups = groupLinesForCleanLayout(lines);
 
   lineGroups.forEach((group, idx) => {
@@ -318,9 +349,6 @@ function renderLiteratiCardAST(doc, startX, pageWidth, sec, checkPageOverflow) {
   });
 }
 
-/**
- * 将多行文本按 6-8 行进行智能优雅分组，防止单卡片过长溢出切分杂乱
- */
 function groupLinesForCleanLayout(lines) {
   const groups = [];
   let currentGroup = [];
@@ -340,9 +368,6 @@ function groupLinesForCleanLayout(lines) {
   return groups;
 }
 
-/**
- * 渲染单个精美宣纸子卡片
- */
 function renderSingleSubCard(doc, startX, pageWidth, title, lines, checkPageOverflow) {
   doc.fontSize(9.8);
   let contentHeight = 0;

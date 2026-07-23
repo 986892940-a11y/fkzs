@@ -127,7 +127,7 @@ app.post('/api/transcribe-memo', async (req, res) => {
 
 // 生成图文反馈
 app.post('/api/generate-feedback', upload.single('audioFile'), async (req, res) => {
-  const { type, memoPath, transcript, apiKey, studentName, studentGrade, imageStyle } = req.body;
+  const { type, memoPath, transcript, apiKey, studentName, studentGrade, imageStyle, posterMode } = req.body;
   let tempFilePath = null;
 
   try {
@@ -158,24 +158,27 @@ app.post('/api/generate-feedback', upload.single('audioFile'), async (req, res) 
       feedback = await generateFeedbackFromAudio(targetAudioPath, mimeType, studentName, apiKey);
     }
 
-    // 结合逐字稿与用户主题，调用 Nano Banana 2 (gemini-3.1-flash-image) 生成 16:9 2K 海报 (支持多模块多图)
+    // 结合逐字稿与用户主题，调用 Nano Banana 2 生成海报 (依据 posterMode 控制)
     let imageBase64 = null;
     let imagesBase64 = [];
     try {
-      console.log(`[Server] 🍌 正在调用 Nano Banana 2 (gemini-3.1-flash-image) 模型，结合逐字稿考点与主题【${imageStyle || '宋代山水画意境'}】生成 16:9 2K 知识图片...`);
-      const imgRes = await composeKnowledgeCardImage({
-        transcript: transcript || feedback,
-        feedbackText: feedback,
-        styleType: imageStyle || '宋代山水画意境',
-        customApiKey: apiKey
-      });
+      if (posterMode !== 'none') {
+        console.log(`[Server] 🍌 正在调用 Nano Banana 2 模型 (海报模式: ${posterMode || 'single'}, 主题: ${imageStyle || '宋代山水画意境'})...`);
+        const imgRes = await composeKnowledgeCardImage({
+          transcript: transcript || feedback,
+          feedbackText: feedback,
+          styleType: imageStyle || '宋代山水画意境',
+          customApiKey: apiKey,
+          posterMode: posterMode || 'single'
+        });
 
-      if (imgRes && typeof imgRes === 'object') {
-        imageBase64 = imgRes.primaryImage || null;
-        imagesBase64 = Array.isArray(imgRes.allImages) ? imgRes.allImages : (imageBase64 ? [imageBase64] : []);
-      } else if (typeof imgRes === 'string') {
-        imageBase64 = imgRes;
-        imagesBase64 = [imgRes];
+        if (imgRes && typeof imgRes === 'object') {
+          imageBase64 = imgRes.primaryImage || null;
+          imagesBase64 = Array.isArray(imgRes.allImages) ? imgRes.allImages : (imageBase64 ? [imageBase64] : []);
+        } else if (typeof imgRes === 'string') {
+          imageBase64 = imgRes;
+          imagesBase64 = [imgRes];
+        }
       }
     } catch (imgErr) {
       console.warn('[Server] 合成知识图谱图片告警:', imgErr.message);
@@ -200,7 +203,7 @@ app.post('/api/generate-feedback', upload.single('audioFile'), async (req, res) 
 
 // 导出 PDF
 app.post('/api/generate-pdf', async (req, res) => {
-  const { studentName, studentGrade, feedbackText, imageBase64, imagesBase64 } = req.body;
+  const { studentName, studentGrade, pdfBrandTitle, pdfHeaderTitle, feedbackText, imageBase64, imagesBase64 } = req.body;
 
   if (!feedbackText) {
     return res.status(400).json({ success: false, message: '反馈文本内容不能为空' });
@@ -210,6 +213,8 @@ app.post('/api/generate-pdf', async (req, res) => {
     const pdfBuffer = await generateFeedbackPDF({
       studentName,
       studentGrade,
+      pdfBrandTitle,
+      pdfHeaderTitle,
       feedbackText,
       imageBuffer: imageBase64,
       imagesBase64: imagesBase64 || (imageBase64 ? [imageBase64] : [])

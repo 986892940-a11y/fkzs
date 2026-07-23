@@ -261,19 +261,57 @@
   background: var(--panel-bg);
   border: 1px solid var(--panel-border);
   border-radius: var(--radius-lg);
-  padding: 2rem;
+  padding: 1.8rem;
   width: 100%;
-  max-width: 540px;
+  max-width: 620px;
   box-shadow: var(--shadow-md);
   color: var(--text-primary);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
 }
 
-/* Settings Tabs */
+/* Settings Tabs Bar */
+.settings-tabs {
+  display: flex;
+  gap: 0.4rem;
+  border-bottom: 1px solid var(--panel-border);
+  margin-bottom: 1.2rem;
+  padding-bottom: 0.6rem;
+}
+
+.settings-tab-btn {
+  padding: 0.5rem 0.9rem;
+  border-radius: var(--radius-md);
+  font-size: 0.88rem;
+  font-weight: 600;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+}
+
+.settings-tab-btn:hover {
+  color: var(--primary);
+  background: rgba(79, 70, 229, 0.05);
+}
+
+.settings-tab-btn.active {
+  background: rgba(79, 70, 229, 0.1);
+  color: var(--primary);
+  border-color: rgba(79, 70, 229, 0.25);
+}
+
+.settings-tab-content {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 0.4rem;
+}
+
+/* Settings Group & Item */
 .settings-group {
   display: flex;
   flex-direction: column;
   gap: 1.2rem;
-  margin-top: 1rem;
 }
 
 .settings-item {
@@ -313,4 +351,73 @@
   background: var(--primary);
   color: #ffffff;
   border-color: var(--primary);
+}
+
+/* 标签词库管理器样式 */
+.tag-manager-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  background: rgba(0, 0, 0, 0.02);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+}
+
+[data-theme="dark"] .tag-manager-box {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.tag-manage-chip-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.tag-manage-chip {
+  background: var(--chip-bg);
+  border: 1px solid var(--chip-border);
+  color: var(--text-primary);
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--radius-full);
+  font-size: 0.82rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.tag-delete-icon {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-weight: 700;
+  font-size: 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+}
+.tag-delete-icon:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--danger);
+}
+
+/* 全屏拖拽 Drag & Drop Overlay */
+.drag-drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(79, 70, 229, 0.85);
+  backdrop-filter: blur(12px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  border: 4px dashed #ffffff;
+  margin: 1.5rem;
+  border-radius: var(--radius-lg);
+  animation: pulseGlow 2s infinite ease-in-out;
+  pointer-events: none;
 }

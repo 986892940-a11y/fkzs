@@ -316,18 +316,31 @@ export async function composeKnowledgeCardImage(options, styleTypeOpt = '宋代�
   let feedbackText = options;
   let styleType = styleTypeOpt;
   let customApiKey = customApiKeyOpt;
+  let posterMode = 'single';
 
   if (options && typeof options === 'object') {
     feedbackText = options.feedbackText || options.transcript || options.feedback || '';
     styleType = options.styleType || options.style || '宋代山水画意境';
     customApiKey = options.customApiKey || options.apiKey;
+    posterMode = options.posterMode || 'single';
   }
 
-  console.log(`[ImageComposer] 🍌 调起 Nano Banana 2 模块化多图生成引擎 (主题: "${styleType}")...`);
+  if (posterMode === 'none') {
+    console.log(`[ImageComposer] ⚡ 模式为【纯文字极速模式】，跳过海报生成。`);
+    return { primaryImage: null, allImages: [] };
+  }
+
+  console.log(`[ImageComposer] 🍌 调起 Nano Banana 2 模块化海报引擎 (模式: ${posterMode}, 主题: "${styleType}")...`);
 
   const extractedData = await extractModulesAndKnowledgePoints(feedbackText, customApiKey);
-  const modules = extractedData.modules || [];
+  let modules = extractedData.modules || [];
   const courseTitle = extractedData.courseTitle || '本课核心知识图谱';
+
+  if (posterMode === 'single') {
+    modules = modules.slice(0, 1);
+  } else if (posterMode === 'multi') {
+    modules = modules.slice(0, 2);
+  }
 
   const imagesBase64 = [];
 

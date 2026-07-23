@@ -13,19 +13,25 @@ const DEFAULT_QUICK_THEMES = [
 ];
 
 export default function App() {
+  // 学生与业务输入
   const [studentName, setStudentName] = useState('');
-  const [studentGrade, setStudentGrade] = useState('高一');
+  const [studentGrade, setStudentGrade] = useState(() => localStorage.getItem('default_student_grade') || '高一');
   const [customThemePrompt, setCustomThemePrompt] = useState('宋代山水画意境');
   const [transcriptText, setTranscriptText] = useState('');
 
-  // 1. 设置偏好：外观主题、评语语气、PDF署名、API Key
+  // 1. 设置偏好与选项卡
+  const [activeSettingsTab, setActiveSettingsTab] = useState('visual');
   const [themeMode, setThemeMode] = useState(() => localStorage.getItem('app_theme') || 'light');
   const [feedbackTone, setFeedbackTone] = useState(() => localStorage.getItem('feedback_tone') || '严谨鼓励');
   const [pdfBrandTitle, setPdfBrandTitle] = useState(() => localStorage.getItem('pdf_brand_title') || '');
+  const [pdfHeaderTitle, setPdfHeaderTitle] = useState(() => localStorage.getItem('pdf_header_title') || '尘埃落定 · 始见星辰');
+  const [posterMode, setPosterMode] = useState(() => localStorage.getItem('poster_mode') || 'single'); // single, multi, none
+  const [audioInsertMode, setAudioInsertMode] = useState(() => localStorage.getItem('audio_insert_mode') || 'replace'); // replace, append
+  const [autoFetchMemos, setAutoFetchMemos] = useState(() => localStorage.getItem('auto_fetch_memos') !== 'false');
   const [customApiKey, setCustomApiKey] = useState(() => localStorage.getItem('gemini_api_key') || '');
   const [showSettingsModal, setShowSettingsModal] = useState(false);
 
-  // 常用主题列表
+  // 常用主题词库 (支持点选、添加、删除、排序)
   const [quickThemes, setQuickThemes] = useState(() => {
     try {
       const saved = localStorage.getItem('custom_quick_themes');
@@ -34,6 +40,10 @@ export default function App() {
       return DEFAULT_QUICK_THEMES;
     }
   });
+  const [newThemeInput, setNewThemeInput] = useState('');
+
+  // 拖拽文件 overlay 状态
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
 
   // 语音备忘录及本地音频
   const [voiceMemos, setVoiceMemos] = useState([]);
@@ -58,8 +68,10 @@ export default function App() {
   }, [themeMode]);
 
   useEffect(() => {
-    fetchVoiceMemos();
-  }, []);
+    if (autoFetchMemos) {
+      fetchVoiceMemos();
+    }
+  }, [autoFetchMemos]);
 
   const fetchVoiceMemos = async () => {
     try {
@@ -73,11 +85,19 @@ export default function App() {
     }
   };
 
+  // 保存设置中心配置
   const handleSaveSettings = (e) => {
     if (e) e.preventDefault();
     localStorage.setItem('app_theme', themeMode);
     localStorage.setItem('feedback_tone', feedbackTone);
     localStorage.setItem('pdf_brand_title', pdfBrandTitle.trim());
+    localStorage.setItem('pdf_header_title', pdfHeaderTitle.trim() || '尘埃落定 · 始见星辰');
+    localStorage.setItem('poster_mode', posterMode);
+    localStorage.setItem('audio_insert_mode', audioInsertMode);
+    localStorage.setItem('auto_fetch_memos', autoFetchMemos ? 'true' : 'false');
+    localStorage.setItem('default_student_grade', studentGrade);
+    localStorage.setItem('custom_quick_themes', JSON.stringify(quickThemes));
+
     if (customApiKey.trim()) {
       localStorage.setItem('gemini_api_key', customApiKey.trim());
     } else {
@@ -86,17 +106,45 @@ export default function App() {
     setShowSettingsModal(false);
   };
 
-  // 添加用户常用主题快捷标签
-  const handleAddCustomQuickTheme = () => {
-    const themeName = window.prompt('请输入您常用的主题名称（例如：大鱼海棠、赛博朋克...）：');
-    if (themeName && themeName.trim()) {
-      const trimmed = themeName.trim();
+  // 重置恢复默认设置
+  const handleResetSettings = () => {
+    if (window.confirm('确认恢复所有偏好设置至初始默认状态？')) {
+      setThemeMode('light');
+      setFeedbackTone('严谨鼓励');
+      setPdfBrandTitle('');
+      setPdfHeaderTitle('尘埃落定 · 始见星辰');
+      setPosterMode('single');
+      setAudioInsertMode('replace');
+      setAutoFetchMemos(true);
+      setCustomApiKey('');
+      setQuickThemes(DEFAULT_QUICK_THEMES);
+      localStorage.clear();
+      setShowSettingsModal(false);
+    }
+  };
+
+  // 添加主题词到词库
+  const handleAddThemeTag = (e) => {
+    if (e) e.preventDefault();
+    if (newThemeInput && newThemeInput.trim()) {
+      const trimmed = newThemeInput.trim();
       if (!quickThemes.includes(trimmed)) {
         const updated = [...quickThemes, trimmed];
         setQuickThemes(updated);
         localStorage.setItem('custom_quick_themes', JSON.stringify(updated));
         setCustomThemePrompt(trimmed);
       }
+      setNewThemeInput('');
+    }
+  };
+
+  // 删除主题词
+  const handleDeleteThemeTag = (tagToDelete) => {
+    const updated = quickThemes.filter(tag => tag !== tagToDelete);
+    setQuickThemes(updated);
+    localStorage.setItem('custom_quick_themes', JSON.stringify(updated));
+    if (customThemePrompt === tagToDelete) {
+      setCustomThemePrompt(updated[0] || '');
     }
   };
 
@@ -108,13 +156,21 @@ export default function App() {
       const res = await fetch(`${API_BASE}/launch-voice-memos`, { method: 'POST' });
       const data = await res.json();
       if (data.success) {
-        setRecordingStatusNotice('✨ 已调起语音备忘录！录音完成后点上方“选择本地音频”或从列表抓取。');
+        setRecordingStatusNotice('✨ 已调起语音备忘录！录音完成后点上方“选本地音频”或从列表抓取。');
       } else {
-        setRecordingStatusNotice('可以手动打开 macOS 语音备忘录或直接点击“导入本地音频”。');
+        setRecordingStatusNotice('可以手动打开 macOS 语音备忘录或直接拖拽/导入录音文件。');
       }
     } catch (err) {
       setRecordingStatusNotice('请确认后台服务正在正常运行。');
     }
+  };
+
+  // 辅助函数：根据填入策略合并逐字稿
+  const applyTranscriptInsertion = (newTranscriptText) => {
+    if (audioInsertMode === 'append' && transcriptText.trim()) {
+      return `${transcriptText.trim()}\n\n--- (追加的录音转写文本) ---\n${newTranscriptText.trim()}`;
+    }
+    return newTranscriptText.trim();
   };
 
   // 2. 抓取选中的音频并自动转文字
@@ -137,10 +193,11 @@ export default function App() {
 
       const data = await res.json();
       if (data.success && data.transcript) {
-        setTranscriptText(data.transcript);
-        setRecordingStatusNotice(`🎉 成功抓取“${data.filename || '音频文件'}”，已自动填入文本框！`);
+        const finalContent = applyTranscriptInsertion(data.transcript);
+        setTranscriptText(finalContent);
+        setRecordingStatusNotice(`🎉 成功抓取“${data.filename || '音频文件'}”，已填入文本框！`);
       } else {
-        setError(data.message || '受限于 macOS 权限未能读取文件，请使用【手动选择音频文件】');
+        setError(data.message || '受限于 macOS 权限未能读取文件，请使用【拖拽文件】或【选择本地音频】');
         setRecordingStatusNotice('');
       }
     } catch (err) {
@@ -151,14 +208,13 @@ export default function App() {
     }
   };
 
-  // 3. 上传本地音频文件
-  const handleFileUpload = async (e) => {
-    const file = e.target.files[0];
+  // 3. 处理本地音频文件上传 (支持点击选择与文件拖拽 Drop)
+  const processAudioFile = async (file) => {
     if (!file) return;
 
     setIsTranscribing(true);
     setError('');
-    setRecordingStatusNotice(`正在上传“${file.name}”并转写为文字...`);
+    setRecordingStatusNotice(`正在解析上传“${file.name}”并转写为文字...`);
 
     const formData = new FormData();
     if (customApiKey.trim()) {
@@ -175,8 +231,9 @@ export default function App() {
 
       const data = await res.json();
       if (data.success && data.transcript) {
-        setTranscriptText(data.transcript);
-        setRecordingStatusNotice(`🎉 导入“${file.name}”成功！已自动转写为文字填入文本框。`);
+        const finalContent = applyTranscriptInsertion(data.transcript);
+        setTranscriptText(finalContent);
+        setRecordingStatusNotice(`🎉 导入“${file.name}”成功！已填入逐字稿文本框。`);
       } else {
         setError(data.message || '音频转文字失败，请检查音频格式');
       }
@@ -187,9 +244,44 @@ export default function App() {
     }
   };
 
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) processAudioFile(file);
+  };
+
+  // 全屏 Drag & Drop 文件拖拽监听
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDraggingFile) setIsDraggingFile(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.clientX === 0 && e.clientY === 0) {
+      setIsDraggingFile(false);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingFile(false);
+
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const file = e.dataTransfer.files[0];
+      if (file.type.startsWith('audio/') || file.name.match(/\.(m4a|mp3|wav|aac|flac|ogg)$/i)) {
+        processAudioFile(file);
+      } else {
+        setError('拖入的文件非标准音频格式，请拖入 .m4a, .mp3, .wav 格式录音');
+      }
+    }
+  };
+
   const handleGenerate = async () => {
     if (!transcriptText || !transcriptText.trim()) {
-      setError('逐字稿内容不能为空。请选择音频转文字，或在此直接粘贴文本');
+      setError('逐字稿内容不能为空。请拖入/选择音频转文字，或在此直接粘贴文本');
       return;
     }
 
@@ -208,6 +300,7 @@ export default function App() {
     formData.append('studentGrade', studentGrade);
     formData.append('feedbackTone', feedbackTone);
     formData.append('imageStyle', customThemePrompt.trim() || '宋代山水画意境');
+    formData.append('posterMode', posterMode);
     formData.append('transcript', transcriptText.trim());
 
     try {
@@ -252,7 +345,7 @@ export default function App() {
     const filename = `课后学习反馈纯文本_${studentName.trim() || '学员'}_${studentGrade}_${dateStr}.txt`;
 
     let fullTextContent = `========================================================\n`;
-    fullTextContent += `        ${pdfBrandTitle.trim() || '课后学习反馈档案 (v2.0 纯文本档案版)'}\n`;
+    fullTextContent += `        ${pdfBrandTitle.trim() || '课后学习反馈档案'}\n`;
     fullTextContent += `========================================================\n`;
     fullTextContent += `【学员姓名】：${studentName.trim() || '未指定'}\n`;
     fullTextContent += `【学员学段】：${studentGrade}\n`;
@@ -273,7 +366,7 @@ export default function App() {
     }
 
     fullTextContent += `========================================================\n`;
-    fullTextContent += `尘埃落定 · 始见星辰\n`;
+    fullTextContent += `${pdfHeaderTitle.trim() || '尘埃落定 · 始见星辰'}\n`;
     fullTextContent += `========================================================\n`;
 
     const blob = new Blob([fullTextContent], { type: 'text/plain;charset=utf-8' });
@@ -301,6 +394,7 @@ export default function App() {
           studentName: studentName.trim(),
           studentGrade: studentGrade,
           pdfBrandTitle: pdfBrandTitle.trim() || undefined,
+          pdfHeaderTitle: pdfHeaderTitle.trim() || undefined,
           feedbackText: generatedFeedback,
           imageBase64: knowledgeImageBase64,
           imagesBase64: knowledgeImagesBase64
@@ -419,7 +513,23 @@ export default function App() {
   };
 
   return (
-    <div className="app-container">
+    <div
+      className="app-container"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* 拖拽音频全屏高亮覆盖层 */}
+      {isDraggingFile && (
+        <div className="drag-drop-overlay">
+          <div style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>📁</div>
+          <div style={{ fontSize: '1.5rem', fontWeight: '700' }}>释放鼠标直接导入音频文件</div>
+          <p style={{ fontSize: '0.9rem', opacity: 0.9, marginTop: '0.4rem' }}>
+            支持拖入 .m4a, .mp3, .wav 课堂录音文件并一键转文字
+          </p>
+        </div>
+      )}
+
       {/* 顶部 Header */}
       <header className="header-bar">
         <div className="brand-title">
@@ -447,101 +557,259 @@ export default function App() {
         </div>
       </header>
 
-      {/* 核心设置弹窗 (Settings Modal) */}
+      {/* 核心设置中心 Modal (多选项卡控制) */}
       {showSettingsModal && (
         <div className="modal-overlay" onClick={() => setShowSettingsModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.8rem' }}>
               <h3 style={{ fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                ⚙️ 应用设置中心
+                ⚙️ 教学偏好设置中心
               </h3>
               <button onClick={() => setShowSettingsModal(false)} style={{ background: 'transparent', fontSize: '1.2rem', color: 'var(--text-muted)' }}>
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleSaveSettings} className="settings-group">
-              {/* 1. 界面外观与配色偏好 */}
-              <div className="settings-item">
-                <div>
-                  <div className="settings-label">🎨 界面外观与配色方案</div>
-                  <div className="settings-desc">选择符合您使用习惯的视觉界面模式</div>
-                </div>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button
-                    type="button"
-                    onClick={() => setThemeMode('light')}
-                    className={`theme-toggle-btn ${themeMode === 'light' ? 'active' : ''}`}
-                  >
-                    🍃 素雅暖光
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setThemeMode('dark')}
-                    className={`theme-toggle-btn ${themeMode === 'dark' ? 'active' : ''}`}
-                  >
-                    🌙 深邃夜间
-                  </button>
-                </div>
-              </div>
+            {/* 设置 Tabs 栏 */}
+            <div className="settings-tabs">
+              <button
+                type="button"
+                onClick={() => setActiveSettingsTab('visual')}
+                className={`settings-tab-btn ${activeSettingsTab === 'visual' ? 'active' : ''}`}
+              >
+                🎨 外观与主题
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveSettingsTab('ai')}
+                className={`settings-tab-btn ${activeSettingsTab === 'ai' ? 'active' : ''}`}
+              >
+                🤖 AI & 海报模式
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveSettingsTab('audio')}
+                className={`settings-tab-btn ${activeSettingsTab === 'audio' ? 'active' : ''}`}
+              >
+                🎙️ 音频通道
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveSettingsTab('export')}
+                className={`settings-tab-btn ${activeSettingsTab === 'export' ? 'active' : ''}`}
+              >
+                📄 PDF & 署名
+              </button>
+            </div>
 
-              {/* 2. 反馈评语语气偏好 */}
-              <div className="settings-item" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.6rem' }}>
-                <div>
-                  <div className="settings-label">📝 反馈评语语气风格</div>
-                  <div className="settings-desc">生成课后反馈报告时 AI 的写作语气</div>
-                </div>
-                <select
-                  value={feedbackTone}
-                  onChange={(e) => setFeedbackTone(e.target.value)}
-                  className="form-select"
-                  style={{ width: '100%' }}
-                >
-                  <option value="严谨鼓励">严谨鼓励（专业严谨，富有正向关怀）</option>
-                  <option value="温和亲切">温和亲切（平易近人，便于家长沟通）</option>
-                  <option value="考纲提分">考纲提分（聚焦中高考考点与解题技巧）</option>
-                </select>
-              </div>
+            {/* 选项卡内容 */}
+            <div className="settings-tab-content">
+              {activeSettingsTab === 'visual' && (
+                <div className="settings-group">
+                  {/* 外观切换 */}
+                  <div className="settings-item">
+                    <div>
+                      <div className="settings-label">🎨 界面外观模式</div>
+                      <div className="settings-desc">选择视觉配色界面模式</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button
+                        type="button"
+                        onClick={() => setThemeMode('light')}
+                        className={`theme-toggle-btn ${themeMode === 'light' ? 'active' : ''}`}
+                      >
+                        🍃 素雅暖光
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setThemeMode('dark')}
+                        className={`theme-toggle-btn ${themeMode === 'dark' ? 'active' : ''}`}
+                      >
+                        🌙 深邃夜间
+                      </button>
+                    </div>
+                  </div>
 
-              {/* 3. PDF 导出抬头发行署名 */}
-              <div className="settings-item" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.6rem' }}>
-                <div>
-                  <div className="settings-label">📄 PDF 导出机构/教师署名</div>
-                  <div className="settings-desc">导出的 PDF 报告顶部显示的个人或工作室名称</div>
-                </div>
-                <input
-                  type="text"
-                  placeholder="如：彭老师语文名师工作室"
-                  value={pdfBrandTitle}
-                  onChange={(e) => setPdfBrandTitle(e.target.value)}
-                  className="form-input"
-                />
-              </div>
+                  {/* 可视化常用主题词库管理器 */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                    <div>
+                      <div className="settings-label">🎨 可视化常用主题词库管理</div>
+                      <div className="settings-desc">自由添加、编辑或删除个人常用风格库</div>
+                    </div>
 
-              {/* 4. 自定义 Gemini API Key (备用覆盖) */}
-              <div className="settings-item" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.6rem', borderBottom: 'none' }}>
-                <div>
-                  <div className="settings-label">🔑 Gemini API Key（可选覆盖）</div>
-                  <div className="settings-desc">默认自动使用系统后台 .env 配置。如需临时使用自己的 Key 可在此填入</div>
-                </div>
-                <input
-                  type="password"
-                  placeholder="默认使用后台环境配置 (留空即可)"
-                  value={customApiKey}
-                  onChange={(e) => setCustomApiKey(e.target.value)}
-                  className="form-input"
-                />
-              </div>
+                    <div className="tag-manager-box">
+                      <div className="tag-manage-chip-grid">
+                        {quickThemes.map((tag) => (
+                          <div key={tag} className="tag-manage-chip">
+                            <span>{tag}</span>
+                            <span
+                              onClick={() => handleDeleteThemeTag(tag)}
+                              className="tag-delete-icon"
+                              title="删除此主题标签"
+                            >
+                              ✕
+                            </span>
+                          </div>
+                        ))}
+                      </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.6rem', marginTop: '0.5rem' }}>
+                      <form onSubmit={handleAddThemeTag} style={{ display: 'flex', gap: '0.5rem', marginTop: '0.4rem' }}>
+                        <input
+                          type="text"
+                          placeholder="新增主题风格（如：水墨中国风、赛博朋克...）"
+                          value={newThemeInput}
+                          onChange={(e) => setNewThemeInput(e.target.value)}
+                          className="form-input"
+                          style={{ fontSize: '0.85rem', padding: '0.45rem 0.8rem' }}
+                        />
+                        <button type="submit" className="btn-secondary" style={{ padding: '0.45rem 0.9rem', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
+                          + 添加主题
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeSettingsTab === 'ai' && (
+                <div className="settings-group">
+                  {/* 海报生成模式 */}
+                  <div className="settings-item" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.6rem' }}>
+                    <div>
+                      <div className="settings-label">🖼️ 知识图谱海报生成模式</div>
+                      <div className="settings-desc">选择生成反馈报告时 AI 海报的绘制张数与速度</div>
+                    </div>
+                    <select
+                      value={posterMode}
+                      onChange={(e) => setPosterMode(e.target.value)}
+                      className="form-select"
+                      style={{ width: '100%' }}
+                    >
+                      <option value="single">自动单张 (标准 16:9 2K 知识海报) - 推荐</option>
+                      <option value="multi">双模块多图 (针对复杂知识点绘制 2 张海报)</option>
+                      <option value="none">纯文字极速模式 (不生成图片，极速输出省流量)</option>
+                    </select>
+                  </div>
+
+                  {/* 评语语气风格 */}
+                  <div className="settings-item" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.6rem' }}>
+                    <div>
+                      <div className="settings-label">📝 评语语气风格</div>
+                      <div className="settings-desc">AI 生成课后总结时的语气倾向</div>
+                    </div>
+                    <select
+                      value={feedbackTone}
+                      onChange={(e) => setFeedbackTone(e.target.value)}
+                      className="form-select"
+                      style={{ width: '100%' }}
+                    >
+                      <option value="严谨鼓励">严谨鼓励（专业严谨，富有正向关怀）</option>
+                      <option value="温和亲切">温和亲切（平易近人，便于家长沟通）</option>
+                      <option value="考纲提分">考纲提分（聚焦中高考考点与解题技巧）</option>
+                    </select>
+                  </div>
+
+                  {/* Gemini API Key 覆盖 */}
+                  <div className="settings-item" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.6rem' }}>
+                    <div>
+                      <div className="settings-label">🔑 Gemini API Key (可选覆盖)</div>
+                      <div className="settings-desc">默认使用系统后台 .env 配置，如需临时使用自己的 Key 可填入</div>
+                    </div>
+                    <input
+                      type="password"
+                      placeholder="默认使用后台环境配置 (留空即可)"
+                      value={customApiKey}
+                      onChange={(e) => setCustomApiKey(e.target.value)}
+                      className="form-input"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {activeSettingsTab === 'audio' && (
+                <div className="settings-group">
+                  {/* 音频自动抓取与刷新 */}
+                  <div className="settings-item">
+                    <div>
+                      <div className="settings-label">🎙️ 启动时自动扫描语音备忘录</div>
+                      <div className="settings-desc">打开软件时自动感知 macOS 语音备忘录最新的音频</div>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={autoFetchMemos}
+                      onChange={(e) => setAutoFetchMemos(e.target.checked)}
+                      style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                    />
+                  </div>
+
+                  {/* 逐字稿填入策略 */}
+                  <div className="settings-item" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.6rem' }}>
+                    <div>
+                      <div className="settings-label">📝 录音转写填入策略</div>
+                      <div className="settings-desc">音频转为文字后填入文本框的叠加逻辑</div>
+                    </div>
+                    <select
+                      value={audioInsertMode}
+                      onChange={(e) => setAudioInsertMode(e.target.value)}
+                      className="form-select"
+                      style={{ width: '100%' }}
+                    >
+                      <option value="replace">覆盖当前逐字稿 (默认，清空旧文本并写入新文字)</option>
+                      <option value="append">追加到当前逐字稿末尾 (保留已有文本，方便多段音频合并)</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {activeSettingsTab === 'export' && (
+                <div className="settings-group">
+                  {/* PDF 机构/教师署名 */}
+                  <div className="settings-item" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.6rem' }}>
+                    <div>
+                      <div className="settings-label">📄 PDF 导出抬头/署名</div>
+                      <div className="settings-desc">生成的 PDF 报告顶部显示的个人或工作室名称</div>
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="如：彭老师语文名师工作室"
+                      value={pdfBrandTitle}
+                      onChange={(e) => setPdfBrandTitle(e.target.value)}
+                      className="form-input"
+                    />
+                  </div>
+
+                  {/* 自定义页眉标语 */}
+                  <div className="settings-item" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.6rem' }}>
+                    <div>
+                      <div className="settings-label">🔖 PDF 页眉标语 (Slogan)</div>
+                      <div className="settings-desc">导出的 PDF 顶部横线上方显示的标语（默认为品牌 Slogan）</div>
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="尘埃落定 · 始见星辰"
+                      value={pdfHeaderTitle}
+                      onChange={(e) => setPdfHeaderTitle(e.target.value)}
+                      className="form-input"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 底部按钮栏 */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.2rem', paddingTop: '0.8rem', borderTop: '1px solid var(--panel-border)' }}>
+              <button type="button" onClick={handleResetSettings} className="btn-secondary" style={{ color: 'var(--danger)', borderColor: 'rgba(239, 68, 68, 0.3)' }}>
+                ↺ 恢复默认设置
+              </button>
+              <div style={{ display: 'flex', gap: '0.6rem' }}>
                 <button type="button" onClick={() => setShowSettingsModal(false)} className="btn-secondary">
                   取消
                 </button>
-                <button type="submit" className="btn-cta" style={{ width: 'auto', padding: '0.6rem 1.4rem', fontSize: '0.9rem' }}>
+                <button type="button" onClick={handleSaveSettings} className="btn-cta" style={{ width: 'auto', padding: '0.55rem 1.4rem', fontSize: '0.9rem' }}>
                   保存设置
                 </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}
@@ -617,22 +885,14 @@ export default function App() {
                   {tag}
                 </button>
               ))}
-              <button
-                type="button"
-                onClick={handleAddCustomQuickTheme}
-                className="theme-chip"
-                style={{ borderColor: 'rgba(16, 185, 129, 0.4)', color: 'var(--success)' }}
-              >
-                + 自定义常用主题
-              </button>
             </div>
           </div>
 
-          {/* 3. 音频转写通道 */}
+          {/* 3. 音频转写通道 (支持全屏/区域拖拽放置) */}
           <div>
             <div className="section-title" style={{ justifyContent: 'space-between' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span className="icon">🎙️</span> 课堂音频通道
+                <span className="icon">🎙️</span> 课堂音频通道 (支持拖拽录音文件)
               </span>
               {isTranscribing && (
                 <div className="waveform-container">
@@ -651,7 +911,7 @@ export default function App() {
                   🎙️ 唤起语音备忘录
                 </button>
                 <button onClick={() => fileInputRef.current && fileInputRef.current.click()} className="audio-btn">
-                  📁 选本地音频
+                  📁 选/拖本地音频
                 </button>
                 <input
                   type="file"
@@ -682,7 +942,7 @@ export default function App() {
                   ))
                 ) : (
                   <div style={{ padding: '0.6rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                    提示：可唤起语音备忘录录音，或点击“📁 选本地音频”直接导入音频文件。
+                    提示：可把 .m4a/.mp3 拖入应用窗口，或点击“📁 选/拖本地音频”导入。
                   </div>
                 )}
               </div>
@@ -722,7 +982,7 @@ export default function App() {
               </div>
             </div>
             <textarea
-              placeholder="音频转换文字后将自动填入此处，亦可在此直接粘贴或修改逐字稿..."
+              placeholder="直接把音频文件拖入软件，或转写文字后将自动填入此处。亦可直接粘贴逐字稿..."
               value={transcriptText}
               onChange={(e) => setTranscriptText(e.target.value)}
               className="form-input"
@@ -793,7 +1053,7 @@ export default function App() {
                 <div>
                   <h4 style={{ fontSize: '1.1rem', marginBottom: '0.3rem' }}>尚未生成反馈报告</h4>
                   <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem' }}>
-                    通过左侧面板填入学员信息，唤起录音或贴入逐字稿，点击“生成图文课后反馈”。
+                    通过左侧面板填入学员信息，直接拖拽录音文件或贴入逐字稿，点击“生成图文课后反馈”。
                   </p>
                 </div>
 
@@ -805,8 +1065,8 @@ export default function App() {
                   </div>
                   <div className="step-card">
                     <div className="step-number">2</div>
-                    <div className="step-title">导入/转写录音</div>
-                    <div className="step-desc">录音一键提取逐字稿</div>
+                    <div className="step-title">拖拽/转写录音</div>
+                    <div className="step-desc">录音拖入软件一键提取</div>
                   </div>
                   <div className="step-card">
                     <div className="step-number">3</div>
