@@ -269,12 +269,47 @@ export default function App() {
     e.stopPropagation();
     setIsDraggingFile(false);
 
+    // 1. 优先检查文件对象 (包括直接从 macOS 语音备忘录拖拽的 File)
     if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const file = e.dataTransfer.files[0];
-      if (file.type.startsWith('audio/') || file.name.match(/\.(m4a|mp3|wav|aac|flac|ogg)$/i)) {
-        processAudioFile(file);
-      } else {
-        setError('拖入的文件非标准音频格式，请拖入 .m4a, .mp3, .wav 格式录音');
+      // 从语音备忘录直接拖出的文件 type 经常为空，或者名称不带后缀。直接全盘接收任何有效文件！
+      processAudioFile(file);
+      return;
+    }
+
+    // 2. 检查是否有 file:// 的 uri-list (针对某些版本的 Voice Memos 拖拽路径)
+    const uriList = e.dataTransfer ? e.dataTransfer.getData('text/uri-list') : '';
+    if (uriList && uriList.startsWith('file://')) {
+      try {
+        const decodedPath = decodeURIComponent(uriList.replace(/^file:\/\//, ''));
+        setIsTranscribing(true);
+        setError('');
+        setRecordingStatusNotice(`正在解析从语音备忘录拖入的文件...`);
+
+        fetch(`${API_BASE}/transcribe-memo`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            apiKey: customApiKey.trim() || undefined,
+            studentName: studentName.trim(),
+            memoPath: decodedPath
+          })
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.transcript) {
+            const finalContent = applyTranscriptInsertion(data.transcript);
+            setTranscriptText(finalContent);
+            setRecordingStatusNotice(`🎉 从语音备忘录导入成功！已填入文本框。`);
+          } else {
+            setError(data.message || '从语音备忘录提取转写失败');
+          }
+        })
+        .catch(err => setError('拖拽解析失败: ' + err.message))
+        .finally(() => setIsTranscribing(false));
+
+      } catch (err) {
+        setError('拖拽路径解析失败');
       }
     }
   };
