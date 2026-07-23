@@ -5,7 +5,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { getVoiceMemosList, launchVoiceMemosApp, getLatestRecordingFile } from './services/voiceMemos.js';
+import { getVoiceMemosList, launchVoiceMemosApp, openVoiceMemosFolder, getLatestRecordingFile } from './services/voiceMemos.js';
 import { generateFeedbackFromText, generateFeedbackFromAudio } from './services/gemini.js';
 import { composeKnowledgeCardImage } from './services/imageCardComposer.js';
 import { generateFeedbackPDF } from './services/pdfGenerator.js';
@@ -61,6 +61,16 @@ app.get('/api/voice-memos', (req, res) => {
 app.post('/api/launch-voice-memos', async (req, res) => {
   try {
     const result = await launchVoiceMemosApp();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// 在 macOS 访达中打开语音备忘录存储目录
+app.post('/api/open-voice-memos-dir', async (req, res) => {
+  try {
+    const result = await openVoiceMemosFolder();
     res.json(result);
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -127,7 +137,7 @@ app.post('/api/transcribe-memo', async (req, res) => {
 
 // 生成图文反馈
 app.post('/api/generate-feedback', upload.single('audioFile'), async (req, res) => {
-  const { type, memoPath, transcript, apiKey, studentName, studentGrade, imageStyle, posterMode } = req.body;
+  const { type, memoPath, transcript, apiKey, studentName, studentGrade, feedbackTone, imageStyle, posterMode } = req.body;
   let tempFilePath = null;
 
   try {
@@ -137,8 +147,8 @@ app.post('/api/generate-feedback', upload.single('audioFile'), async (req, res) 
       if (!transcript || !transcript.trim()) {
         return res.status(400).json({ success: false, message: '逐字稿文本不能为空' });
       }
-      console.log(`[Server] 正在为【${studentGrade || '未指定'}】学员逐字稿生成反馈...`);
-      feedback = await generateFeedbackFromText(transcript, studentName, studentGrade, apiKey);
+      console.log(`[Server] 正在为【${studentGrade || '未指定'}】学员逐字稿生成反馈 (语气: ${feedbackTone || '严谨鼓励'})...`);
+      feedback = await generateFeedbackFromText(transcript, studentName, studentGrade, apiKey, feedbackTone);
       
     } else if (type === 'audio') {
       let targetAudioPath = memoPath;
@@ -154,8 +164,8 @@ app.post('/api/generate-feedback', upload.single('audioFile'), async (req, res) 
         return res.status(400).json({ success: false, message: '请选择或上传录音文件' });
       }
 
-      console.log(`[Server] 正在为【${studentGrade || '未指定'}】学员音频生成反馈:`, targetAudioPath);
-      feedback = await generateFeedbackFromAudio(targetAudioPath, mimeType, studentName, apiKey);
+      console.log(`[Server] 正在为【${studentGrade || '未指定'}】学员音频生成反馈 (语气: ${feedbackTone || '严谨鼓励'}):`, targetAudioPath);
+      feedback = await generateFeedbackFromAudio(targetAudioPath, mimeType, studentName, apiKey, feedbackTone);
     }
 
     // 结合逐字稿与用户主题，调用 Nano Banana 2 生成海报 (依据 posterMode 控制)

@@ -6,11 +6,12 @@ import util from 'util';
 
 const execAsync = util.promisify(exec);
 
-// 各种可能的 macOS 语音备忘录及本地音视频目录
+// 涵盖所有 macOS 系统的语音备忘录原生存储目录
 const CANDIDATE_DIRS = [
+  path.join(os.homedir(), 'Library/Group Containers/group.com.apple.VoiceMemos.shared/Recordings'),
   path.join(os.homedir(), 'Library/Containers/com.apple.VoiceMemos/Data/Documents'),
-  path.join(os.homedir(), 'Library/Group Containers/group.com.apple.voicememos/Recordings'),
-  path.join(os.homedir(), 'Library/Application Support/com.apple.voicememos/Recordings'),
+  path.join(os.homedir(), 'Library/Application Support/com.apple.VoiceMemos/Recordings'),
+  path.join(os.homedir(), 'Library/Group Containers/group.com.apple.VoiceMemos.shared'),
   path.join(os.homedir(), 'Downloads'),
   path.join(os.homedir(), 'Desktop'),
   path.join(os.homedir(), '.feedback_assistant', 'recordings')
@@ -27,6 +28,23 @@ export async function launchVoiceMemosApp() {
   } catch (err) {
     console.warn('[VoiceMemos] 唤起语音备忘录警告:', err.message);
     return { success: false, message: '唤起失败: ' + err.message };
+  }
+}
+
+/**
+ * 在 macOS 访达 (Finder) 中直接打开语音备忘录原生存储目录
+ */
+export async function openVoiceMemosFolder() {
+  const targetDir = path.join(os.homedir(), 'Library/Group Containers/group.com.apple.VoiceMemos.shared/Recordings');
+  try {
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+    await execAsync(`open "${targetDir}"`);
+    return { success: true, path: targetDir };
+  } catch (err) {
+    console.warn('[VoiceMemos] 打开文件夹失败:', err.message);
+    return { success: false, message: err.message };
   }
 }
 

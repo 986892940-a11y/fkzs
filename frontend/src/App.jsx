@@ -156,12 +156,29 @@ export default function App() {
       const res = await fetch(`${API_BASE}/launch-voice-memos`, { method: 'POST' });
       const data = await res.json();
       if (data.success) {
-        setRecordingStatusNotice('✨ 已调起语音备忘录！录音完成后点上方“选本地音频”或从列表抓取。');
+        setRecordingStatusNotice('✨ 已调起语音备忘录！录音完成后可点“📂 打开语音备忘录文件夹”直接拖选。');
       } else {
         setRecordingStatusNotice('可以手动打开 macOS 语音备忘录或直接拖拽/导入录音文件。');
       }
     } catch (err) {
       setRecordingStatusNotice('请确认后台服务正在正常运行。');
+    }
+  };
+
+  // 1.5 一键在 macOS 访达 (Finder) 中打开语音备忘录存储目录
+  const handleOpenVoiceMemosDir = async () => {
+    setError('');
+    setRecordingStatusNotice('正在 macOS 访达中定位并打开语音备忘录专属文件夹...');
+    try {
+      const res = await fetch(`${API_BASE}/open-voice-memos-dir`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setRecordingStatusNotice('✨ 已在 macOS 访达中打开语音备忘录存储目录！可直接将其中的录音文件拖入软件窗口。');
+      } else {
+        setError('打开目录失败: ' + data.message);
+      }
+    } catch (err) {
+      setError('无法打开目录，请确认后台服务正在正常运行。');
     }
   };
 
@@ -941,12 +958,15 @@ export default function App() {
             </div>
 
             <div className="audio-hub-box" style={{ marginTop: '0.5rem' }}>
-              <div className="audio-actions-row">
-                <button onClick={handleLaunchVoiceMemos} className="audio-btn">
-                  🎙️ 唤起语音备忘录
+              <div className="audio-actions-row" style={{ gridTemplateColumns: '1fr 1.1fr 1fr' }}>
+                <button onClick={handleLaunchVoiceMemos} className="audio-btn" title="调起 macOS 原生语音备忘录">
+                  🎙️ 唤起备忘录
                 </button>
-                <button onClick={() => fileInputRef.current && fileInputRef.current.click()} className="audio-btn">
-                  📁 选/拖本地音频
+                <button onClick={handleOpenVoiceMemosDir} className="audio-btn" style={{ borderColor: 'var(--primary)', color: 'var(--primary)' }} title="直接在 macOS 访达中打开保存有所有录音原文件的专属文件夹">
+                  📂 打开录音文件夹
+                </button>
+                <button onClick={() => fileInputRef.current && fileInputRef.current.click()} className="audio-btn" title="选择本地硬盘里的任意音频文件">
+                  📁 选择本地音频
                 </button>
                 <input
                   type="file"
@@ -958,7 +978,7 @@ export default function App() {
               </div>
 
               {/* 录音列表展示 */}
-              <div style={{ maxHeight: '110px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+              <div style={{ maxHeight: '120px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                 {voiceMemos.length > 0 ? (
                   voiceMemos.map((memo) => (
                     <div
@@ -976,8 +996,17 @@ export default function App() {
                     </div>
                   ))
                 ) : (
-                  <div style={{ padding: '0.6rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                    提示：可把 .m4a/.mp3 拖入应用窗口，或点击“📁 选/拖本地音频”导入。
+                  <div style={{ padding: '0.8rem 0.6rem', textAlign: 'center', background: 'rgba(0,0,0,0.02)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--panel-border)' }}>
+                    <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>
+                      因 macOS 隐私保护机制未自动扫描到已有录音
+                    </div>
+                    <button
+                      onClick={handleOpenVoiceMemosDir}
+                      className="btn-secondary"
+                      style={{ padding: '0.35rem 0.8rem', fontSize: '0.8rem', color: 'var(--primary)', borderColor: 'var(--primary)' }}
+                    >
+                      📂 点击直接打开 Mac 语音备忘录文件夹 (内含所有 .m4a 录音)
+                    </button>
                   </div>
                 )}
               </div>

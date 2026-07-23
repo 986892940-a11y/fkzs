@@ -72,11 +72,20 @@ function getGeminiClient(customApiKey) {
 /**
  * 依据逐字稿文本和学生姓名生成家长反馈
  */
-export async function generateFeedbackFromText(transcript, studentName, studentGrade, customApiKey) {
+export async function generateFeedbackFromText(transcript, studentName, studentGrade, customApiKey, feedbackTone = '严谨鼓励') {
   const ai = getGeminiClient(customApiKey);
   const systemInstruction = getSystemPrompt();
   
   const primaryModel = process.env.FEEDBACK_MODEL || 'gemini-3.5-flash';
+
+  let tonePromptInstruction = '';
+  if (feedbackTone === '温和亲切') {
+    tonePromptInstruction = '【语气与撰写风格要求 - 温和亲切】：请采用极其温暖、亲切、平易近人的语气撰写此份反馈，多表达人文关怀与耐心鼓励，语言亲和自然，如同与家长面对面温暖交流一般。\n';
+  } else if (feedbackTone === '考纲提分') {
+    tonePromptInstruction = '【语气与撰写风格要求 - 考纲提分】：请采用高度目标导向、直击考纲提分的硬核教研语气撰写！重点突出中高考核心考点、题型避坑指南与解题思维突破口，语言干练精准，突显提分成效。\n';
+  } else {
+    tonePromptInstruction = '【语气与撰写风格要求 - 严谨鼓励】：请采用专业严谨、逻辑清晰且富有正向鼓励的语气撰写，既要展现严谨的语文教学分析，又要给予孩子正向关怀与成长信心。\n';
+  }
 
   const currentDateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   let promptText = `以下是课堂录音的逐字稿内容：\n\n${transcript}\n\n`;
@@ -88,9 +97,10 @@ export async function generateFeedbackFromText(transcript, studentName, studentG
   if (studentName && studentName.trim()) {
     promptText += `3. 本堂课的学生姓名是：“${studentName.trim()}”。请在全篇反馈中，所有提及孩子、同学、学生之处，均统一替换为使用名字“${studentName.trim()}”。\n\n`;
   }
+  promptText += tonePromptInstruction;
   promptText += `请严格遵循系统提示词中的 Markdown 格式与教研原则，生成对应的家长课后反馈文本。`;
 
-  console.log(`[Gemini] 开始生成文本反馈。使用模型: ${primaryModel}, 学生姓名: ${studentName || '未指定'}`);
+  console.log(`[Gemini] 开始生成文本反馈。使用模型: ${primaryModel}, 语气风格: ${feedbackTone}, 学生姓名: ${studentName || '未指定'}`);
 
   const candidateModels = [primaryModel, 'gemini-3-flash-preview', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
   let responseText = null;
@@ -132,7 +142,7 @@ export async function generateFeedbackFromText(transcript, studentName, studentG
 /**
  * 依据录音音频和学生姓名直接生成家长反馈
  */
-export async function generateFeedbackFromAudio(audioPath, mimeType, studentName, customApiKey) {
+export async function generateFeedbackFromAudio(audioPath, mimeType, studentName, customApiKey, feedbackTone = '严谨鼓励') {
   const ai = getGeminiClient(customApiKey);
   const systemInstruction = getSystemPrompt();
   
@@ -156,12 +166,22 @@ export async function generateFeedbackFromAudio(audioPath, mimeType, studentName
   console.log(`[Gemini] 音频上传成功，文件 URI: ${fileUpload.uri}`);
 
   try {
+    let tonePromptInstruction = '';
+    if (feedbackTone === '温和亲切') {
+      tonePromptInstruction = '【语气与撰写风格要求 - 温和亲切】：请采用极其温暖、亲切、平易近人的语气撰写此份反馈，多表达人文关怀与耐心鼓励，语言亲和自然。\n';
+    } else if (feedbackTone === '考纲提分') {
+      tonePromptInstruction = '【语气与撰写风格要求 - 考纲提分】：请采用高度目标导向、直击考纲提分的硬核教研语气撰写！重点突出核心考点、题型避坑指南与解题思维突破口，语言干练精准。\n';
+    } else {
+      tonePromptInstruction = '【语气与撰写风格要求 - 严谨鼓励】：请采用专业严谨、逻辑清晰且富有正向鼓励的语气撰写，既有严谨的分析，又有正向成长关怀。\n';
+    }
+
     const currentDateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     let promptText = '这是今天的语文课堂实录音频。请听录音内容，提取授课要点。\n';
     promptText += `【重要时间与姓名约束】：\n1. 今日实时年月日为：“${currentDateStr}”。“课堂记录：”中的八位日期必须严格使用“${currentDateStr}”或音频文件的真正创建/修改日期，绝对严禁捏造虚假的过去年份！\n`;
     if (studentName && studentName.trim()) {
       promptText += `2. 本堂课的学生姓名是：“${studentName.trim()}”。请在撰写课后反馈时，所有提及孩子、学生、同学之处，均统一替换为使用名字“${studentName.trim()}”。\n`;
     }
+    promptText += tonePromptInstruction;
     promptText += '请严格根据系统提示词中的排版格式、教研原则，生成对应的家长课后学习反馈。';
 
     const candidateModels = [primaryModel, 'gemini-3-flash-preview', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
