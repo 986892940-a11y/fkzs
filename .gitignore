@@ -1,3 +1,16 @@
 node_modules/
 release/
 .DS_Store
+
+# Environment files containing secrets / API keys
+.env
+.env.*
+*.env
+!.env.example
+
+# Temporary output and test files
+backend/test_*.pdf
+backend/uploads/
+backend/temp_uploads/
+dist/
+dist-ssr/

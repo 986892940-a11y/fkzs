@@ -5,68 +5,129 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { getVoiceMemosList, ensureDirectories } from './services/voiceMemos.js';
+import { getVoiceMemosList, launchVoiceMemosApp, getLatestRecordingFile } from './services/voiceMemos.js';
 import { generateFeedbackFromText, generateFeedbackFromAudio } from './services/gemini.js';
 import { composeKnowledgeCardImage } from './services/imageCardComposer.js';
 import { generateFeedbackPDF } from './services/pdfGenerator.js';
 
-dotenv.config();
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// 强效跨路径 .env 配置文件自动搜索器
+const possibleEnvPaths = [
+  path.resolve(__dirname, '.env'),
+  path.resolve(__dirname, '../.env'),
+  '/Users/ziwelz/工作/AI/反馈助手/backend/.env',
+  '/Users/ziwelz/工作/AI/反馈助手/.env',
+  path.resolve(process.cwd(), 'backend/.env'),
+  path.resolve(process.cwd(), '.env')
+];
+
+for (const envPath of possibleEnvPaths) {
+  if (fs.existsSync(envPath)) {
+    dotenv.config({ path: envPath });
+    if (process.env.GEMINI_API_KEY) {
+      console.log(`[Server] 成功在 ${envPath} 中加载 GEMINI_API_KEY！`);
+      break;
+    }
+  }
+}
 
 const app = express();
 const PORT = process.env.PORT || 5001;
 
-// 跨域配置
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST'],
-}));
+app.use(cors());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// 解析 JSON 格式主体与 URL 编码主体 (调大限制以便接收大图片 Base64)
-app.use(express.json({ limit: '100mb' }));
-app.use(express.urlencoded({ extended: true, limit: '100mb' }));
+const upload = multer({ dest: path.join(__dirname, 'uploads/') });
 
-// 初始化临时上传文件夹
-const tempUploadDir = path.join(__dirname, 'temp_uploads');
-if (!fs.existsSync(tempUploadDir)) {
-  fs.mkdirSync(tempUploadDir, { recursive: true });
-}
-
-// 配置 Multer 接收上传的音频文件
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, tempUploadDir);
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, `${Date.now()}_temp${ext}`);
-  }
+// 健康检查
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', service: '反馈助手后端 API' });
 });
-const upload = multer({ storage });
 
-// 启动时确保必要文件夹存在
-ensureDirectories();
-
-/**
- * 路由：获取录音备忘录列表
- */
-app.get('/api/voice-memos', async (req, res) => {
+// 获取 macOS 语音备忘录及本地音频列表
+app.get('/api/voice-memos', (req, res) => {
   try {
-    const list = await getVoiceMemosList();
-    res.json({ success: true, data: list });
+    const memos = getVoiceMemosList();
+    res.json({ success: true, data: memos });
   } catch (err) {
-    console.error('获取语音备忘录失败:', err);
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-/**
- * 路由：根据音频或文本生成家长课后反馈和知识点卡片图片
- */
+// 唤起 macOS 原生语音备忘录
+app.post('/api/launch-voice-memos', async (req, res) => {
+  try {
+    const result = await launchVoiceMemosApp();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// 上传任意音频进行 AI 转文字
+app.post('/api/transcribe-uploaded-audio', upload.single('audioFile'), async (req, res) => {
+  const { apiKey, studentName } = req.body;
+  if (!req.file) {
+    return res.status(400).json({ success: false, message: '请上传音频文件' });
+  }
+
+  try {
+    console.log(`[Server] 处理上传音频转文字: ${req.file.path}`);
+    const transcript = await generateFeedbackFromAudio(req.file.path, req.file.mimetype || 'audio/m4a', studentName, apiKey);
+    res.json({ success: true, transcript, filename: req.file.originalname });
+  } catch (err) {
+    console.error('[Server] 音频转文字失败:', err);
+    res.status(500).json({ success: false, message: err.message || '音频转文字失败' });
+  } finally {
+    if (req.file && fs.existsSync(req.file.path)) {
+      try { fs.unlinkSync(req.file.path); } catch (e) {}
+    }
+  }
+});
+
+// 抓取指定或最新音频文件，自动转化为文本逐字稿
+app.post('/api/transcribe-memo', async (req, res) => {
+  const { apiKey, studentName, memoPath } = req.body;
+  try {
+    let targetPath = memoPath;
+    let filename = '选中的音频';
+
+    if (!targetPath) {
+      const latestFile = getLatestRecordingFile();
+      if (!latestFile) {
+        return res.status(404).json({ success: false, message: '未能在系统中扫描到默认音频。请在界面上点击选择或手动导入音频。' });
+      }
+      targetPath = latestFile.path;
+      filename = latestFile.name;
+    } else {
+      filename = path.basename(targetPath);
+    }
+
+    if (!fs.existsSync(targetPath)) {
+      return res.status(404).json({ success: false, message: `音频文件不存在或路径受限制: ${targetPath}` });
+    }
+
+    console.log(`[Server] 开始转写音频文件 [${filename}]:`, targetPath);
+    const mimeType = targetPath.endsWith('.mp3') ? 'audio/mp3' : 'audio/m4a';
+    const feedbackText = await generateFeedbackFromAudio(targetPath, mimeType, studentName, apiKey);
+
+    res.json({
+      success: true,
+      filename,
+      transcript: feedbackText
+    });
+  } catch (err) {
+    console.error('[Server] 转写音频文本异常:', err);
+    res.status(500).json({ success: false, message: err.message || '转写音频失败' });
+  }
+});
+
+// 生成图文反馈
 app.post('/api/generate-feedback', upload.single('audioFile'), async (req, res) => {
-  const { type, memoPath, transcript, apiKey, studentName, imageStyle } = req.body;
+  const { type, memoPath, transcript, apiKey, studentName, studentGrade, imageStyle } = req.body;
   let tempFilePath = null;
 
   try {
@@ -74,106 +135,95 @@ app.post('/api/generate-feedback', upload.single('audioFile'), async (req, res) 
 
     if (type === 'text') {
       if (!transcript || !transcript.trim()) {
-        return res.status(400).json({ success: false, message: '课堂文字稿内容不能为空' });
+        return res.status(400).json({ success: false, message: '逐字稿文本不能为空' });
       }
-      console.log('[Server] 正在为逐字稿生成反馈，字数:', transcript.length);
-      feedback = await generateFeedbackFromText(transcript, studentName, apiKey);
+      console.log(`[Server] 正在为【${studentGrade || '未指定'}】学员逐字稿生成反馈...`);
+      feedback = await generateFeedbackFromText(transcript, studentName, studentGrade, apiKey);
       
     } else if (type === 'audio') {
-      let targetAudioPath = null;
+      let targetAudioPath = memoPath;
       let mimeType = 'audio/m4a';
 
-      if (memoPath) {
-        targetAudioPath = memoPath;
-        mimeType = memoPath.endsWith('.mp3') ? 'audio/mp3' : 'audio/m4a';
-      } else if (req.file) {
+      if (req.file) {
         targetAudioPath = req.file.path;
-        tempFilePath = req.file.path; 
+        tempFilePath = req.file.path;
         mimeType = req.file.mimetype;
       }
 
       if (!targetAudioPath) {
-        return res.status(400).json({ success: false, message: '请选择或上传需要处理的音频文件' });
+        return res.status(400).json({ success: false, message: '请选择或上传录音文件' });
       }
 
-      console.log('[Server] 正在为音频文件生成反馈:', targetAudioPath);
+      console.log(`[Server] 正在为【${studentGrade || '未指定'}】学员音频生成反馈:`, targetAudioPath);
       feedback = await generateFeedbackFromAudio(targetAudioPath, mimeType, studentName, apiKey);
-    } else {
-      return res.status(400).json({ success: false, message: '不支持的请求类型' });
     }
 
-    // 文字生成完成后，生成中文总结图片
-    let imageBase64 = '';
+    // 结合逐字稿与用户主题，调用 Nano Banana 2 (gemini-3.1-flash-image) 生成 16:9 2K 海报 (支持多模块多图)
+    let imageBase64 = null;
+    let imagesBase64 = [];
     try {
-      console.log(`[Server] 正在生成核心知识点卡片图 (风格: ${imageStyle || 'chinese_ink'})...`);
-      imageBase64 = await composeKnowledgeCardImage(feedback, imageStyle || 'chinese_ink', apiKey);
-    } catch (imageErr) {
-      console.error('[Server] 知识点总结图片生成告警:', imageErr.message);
+      console.log(`[Server] 🍌 正在调用 Nano Banana 2 (gemini-3.1-flash-image) 模型，结合逐字稿考点与主题【${imageStyle || '宋代山水画意境'}】生成 16:9 2K 知识图片...`);
+      const imgRes = await composeKnowledgeCardImage({
+        transcript: transcript || feedback,
+        feedbackText: feedback,
+        styleType: imageStyle || '宋代山水画意境',
+        customApiKey: apiKey
+      });
+
+      if (imgRes && typeof imgRes === 'object') {
+        imageBase64 = imgRes.primaryImage || null;
+        imagesBase64 = Array.isArray(imgRes.allImages) ? imgRes.allImages : (imageBase64 ? [imageBase64] : []);
+      } else if (typeof imgRes === 'string') {
+        imageBase64 = imgRes;
+        imagesBase64 = [imgRes];
+      }
+    } catch (imgErr) {
+      console.warn('[Server] 合成知识图谱图片告警:', imgErr.message);
     }
 
-    return res.json({
+    res.json({
       success: true,
       feedback,
-      imageBase64 // 返回给前端直接渲染的 base64 图像
+      imageBase64,
+      imagesBase64
     });
 
   } catch (err) {
-    console.error('生成反馈失败:', err);
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[Server] 生成反馈失败:', err);
+    res.status(500).json({ success: false, message: err.message || '生成反馈失败' });
   } finally {
-    // 异步清理上传的临时文件
     if (tempFilePath && fs.existsSync(tempFilePath)) {
-      fs.unlink(tempFilePath, (err) => {
-        if (err) console.error('清理临时文件失败:', err);
-      });
+      try { fs.unlinkSync(tempFilePath); } catch (e) {}
     }
   }
 });
 
-/**
- * 路由：根据反馈文本与图片 Base64 生成并下载 PDF
- */
+// 导出 PDF
 app.post('/api/generate-pdf', async (req, res) => {
-  const { studentName, feedbackText, imageBase64 } = req.body;
+  const { studentName, studentGrade, feedbackText, imageBase64, imagesBase64 } = req.body;
 
   if (!feedbackText) {
     return res.status(400).json({ success: false, message: '反馈文本内容不能为空' });
   }
 
   try {
-    console.log(`[Server] 正在为学生 ${studentName || '未指定'} 构建图文 PDF...`);
-    
-    let imageBuffer = null;
-    if (imageBase64) {
-      imageBuffer = Buffer.from(imageBase64, 'base64');
-    }
-
     const pdfBuffer = await generateFeedbackPDF({
       studentName,
+      studentGrade,
       feedbackText,
-      imageBuffer
+      imageBuffer: imageBase64,
+      imagesBase64: imagesBase64 || (imageBase64 ? [imageBase64] : [])
     });
 
-    res.contentType('application/pdf');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=feedback.pdf`);
     res.send(pdfBuffer);
-    console.log('[Server] PDF 生成完成并已发送。');
   } catch (err) {
-    console.error('[Server] PDF 生成失败:', err);
-    res.status(500).json({ success: false, message: 'PDF 导出失败: ' + err.message });
+    console.error('[Server] 导出 PDF 失败:', err);
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`=========================================`);
-  console.log(`  反馈助手本地后端已成功启动!`);
-  console.log(`  工作地址: http://127.0.0.1:${PORT}`);
-  console.log(`=========================================`);
-});
-
-server.on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.warn(`[Server Warning] 端口 ${PORT} 已被已有服务占用，服务仍可平滑复用。`);
-  } else {
-    console.error('[Server Error] 监听失败:', err);
-  }
+app.listen(PORT, () => {
+  console.log(`🚀 [Backend API] 反馈助手后端服务已成功启动，监听端口: http://127.0.0.1:${PORT}`);
 });

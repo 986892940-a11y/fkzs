@@ -16,7 +16,8 @@
     "express": "^4.19.2",
     "https-proxy-agent": "^9.1.0",
     "multer": "^1.4.5-lts.1",
-    "pdfkit": "latest"
+    "pdfkit": "latest",
+    "undici": "^8.8.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.4"

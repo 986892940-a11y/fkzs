@@ -6,24 +6,42 @@ import { HttpsProxyAgent } from 'https-proxy-agent';
 import nodeFetch from 'node-fetch';
 import { fileURLToPath } from 'url';
 
-dotenv.config();
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// 挂载安全代理 (确保在 macOS 代理环境下连通 Google API)
-function configureProxy() {
-  const envProxy = process.env.HTTP_PROXY || process.env.HTTPS_PROXY || process.env.http_proxy || process.env.https_proxy;
-  const proxyUrl = envProxy || 'http://127.0.0.1:10808';
+// 强效跨路径 .env 配置文件自动搜索器
+const possibleEnvPaths = [
+  path.resolve(__dirname, '../.env'),
+  path.resolve(__dirname, '../../.env'),
+  path.resolve(__dirname, '.env'),
+  '/Users/ziwelz/工作/AI/反馈助手/backend/.env',
+  '/Users/ziwelz/工作/AI/反馈助手/.env',
+  path.resolve(process.cwd(), 'backend/.env'),
+  path.resolve(process.cwd(), '.env')
+];
 
-  try {
-    const agent = new HttpsProxyAgent(proxyUrl);
-    globalThis.fetch = (url, init) => {
-      return nodeFetch(url, { ...init, agent });
-    };
-    console.log(`[Gemini Network] 代理 Agent 挂载成功: ${proxyUrl}`);
-  } catch (err) {
-    console.warn(`[Gemini Network] 代理 Agent 挂载警告: ${err.message}`);
+for (const envPath of possibleEnvPaths) {
+  if (fs.existsSync(envPath)) {
+    dotenv.config({ path: envPath });
+    if (process.env.GEMINI_API_KEY) {
+      console.log(`[Gemini] 成功在 ${envPath} 中加载 GEMINI_API_KEY！`);
+      break;
+    }
+  }
+}
+
+import { setGlobalDispatcher, ProxyAgent } from 'undici';
+
+// 挂载代理 (自动适配本地 10808 等代理端口)
+function configureProxy() {
+  const commonPorts = [process.env.HTTPS_PROXY, process.env.HTTP_PROXY, 'http://127.0.0.1:10808', 'http://127.0.0.1:7890', 'http://127.0.0.1:7897', 'http://127.0.0.1:1087'];
+  for (const p of commonPorts) {
+    if (p) {
+      try {
+        setGlobalDispatcher(new ProxyAgent(p));
+        break;
+      } catch (e) {}
+    }
   }
 }
 
@@ -36,8 +54,6 @@ function getSystemPrompt() {
   try {
     if (fs.existsSync(PROMPT_FILE_PATH)) {
       return fs.readFileSync(PROMPT_FILE_PATH, 'utf-8');
-    } else {
-      console.warn(`[Gemini] 系统提示词文件未找到: ${PROMPT_FILE_PATH}`);
     }
   } catch (err) {
     console.error('读取系统提示词失败，将使用默认兜底提示词:', err);
@@ -48,7 +64,7 @@ function getSystemPrompt() {
 function getGeminiClient(customApiKey) {
   const apiKey = customApiKey || process.env.GEMINI_API_KEY;
   if (!apiKey || apiKey === 'YOUR_GEMINI_API_KEY_HERE') {
-    throw new Error('未配置有效的 Gemini API Key。请在右上角“配置 API Key”或在 backend/.env 文件中填入您的密钥。');
+    throw new Error('未配置有效的 Gemini API Key。请在 backend/.env 文件中填入您的 GEMINI_API_KEY。');
   }
   return new GoogleGenAI({ apiKey });
 }
@@ -56,25 +72,29 @@ function getGeminiClient(customApiKey) {
 /**
  * 依据逐字稿文本和学生姓名生成家长反馈
  */
-export async function generateFeedbackFromText(transcript, studentName, customApiKey) {
+export async function generateFeedbackFromText(transcript, studentName, studentGrade, customApiKey) {
   const ai = getGeminiClient(customApiKey);
   const systemInstruction = getSystemPrompt();
   
   const primaryModel = process.env.FEEDBACK_MODEL || 'gemini-3.5-flash';
 
-  const currentDateStr = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // 格式如 20260720
+  const currentDateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   let promptText = `以下是课堂录音的逐字稿内容：\n\n${transcript}\n\n`;
-  promptText += `【重要时间与姓名约束】：\n`;
-  promptText += `1. 今日实时年月日为：“${currentDateStr}”。最终输出的第一行“课堂记录：”中的八位日期，必须严格使用实时日期“${currentDateStr}”或音频文件的真实修改日期，绝对严禁凭空捏造过去的虚假年份！\n`;
-  if (studentName && studentName.trim()) {
-    promptText += `2. 本堂课的学生姓名是：“${studentName.trim()}”。请在撰写课后反馈的所有段落中，凡是需要提到孩子、同学、学生或用代词称呼的地方，务必统一替换为使用名字“${studentName.trim()}”进行撰写。\n\n`;
+  promptText += `【重要时间、学段与姓名约束】：\n`;
+  promptText += `1. 今日实时年月日为：“${currentDateStr}”。“课堂记录：”第一行中的八位日期必须严格使用“${currentDateStr}”或音频真实修改日期！\n`;
+  if (studentGrade) {
+    promptText += `2. 当前学员“${studentName || '学员'}”的准确学段是：“${studentGrade}”。请在撰写课后反馈时，切记严格匹配“${studentGrade}”的语文教研标准与考向！【绝对严禁将高中生误写为初中/中考，或将初中生误写为高考！】\n`;
   }
-  promptText += `请严格遵循系统提示词中的排版、格式以及教研原则，生成对应的家长课后反馈文本。`;
+  if (studentName && studentName.trim()) {
+    promptText += `3. 本堂课的学生姓名是：“${studentName.trim()}”。请在全篇反馈中，所有提及孩子、同学、学生之处，均统一替换为使用名字“${studentName.trim()}”。\n\n`;
+  }
+  promptText += `请严格遵循系统提示词中的 Markdown 格式与教研原则，生成对应的家长课后反馈文本。`;
 
   console.log(`[Gemini] 开始生成文本反馈。使用模型: ${primaryModel}, 学生姓名: ${studentName || '未指定'}`);
 
   const candidateModels = [primaryModel, 'gemini-3-flash-preview', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
   let responseText = null;
+  let lastErrorMessage = '';
 
   for (const modelName of candidateModels) {
     try {
@@ -94,11 +114,16 @@ export async function generateFeedbackFromText(transcript, studentName, customAp
       }
     } catch (err) {
       console.warn(`[Gemini] 模型 ${modelName} 尝试失败: ${err.message}`);
+      lastErrorMessage = err.message;
+      // 如果检测到 Key 泄露或 PERMISSION_DENIED，终止盲目重试，抛出精准提示
+      if (err.message.includes('leaked') || err.message.includes('PERMISSION_DENIED') || err.message.includes('API key not valid')) {
+        throw new Error('当前 backend/.env 中的 GEMINI_API_KEY 已失效或被 Google 安全注销。请在 backend/.env 文件中更新有效 API Key。');
+      }
     }
   }
 
   if (!responseText) {
-    throw new Error('反馈生成失败：API 请求无法完成。请检查网络代理连通性与 API Key 是否有效。');
+    throw new Error(lastErrorMessage || '反馈生成失败：API 请求无法完成。请检查网络代理与 API Key。');
   }
 
   return cleanMarkdown(responseText);
@@ -115,10 +140,18 @@ export async function generateFeedbackFromAudio(audioPath, mimeType, studentName
 
   console.log(`[Gemini] 开始上传音频文件: ${audioPath}, MimeType: ${mimeType}`);
   
-  const fileUpload = await ai.files.upload({
-    file: audioPath,
-    mimeType: mimeType || 'audio/m4a'
-  });
+  let fileUpload;
+  try {
+    fileUpload = await ai.files.upload({
+      file: audioPath,
+      mimeType: mimeType || 'audio/m4a'
+    });
+  } catch (uploadErr) {
+    if (uploadErr.message.includes('leaked') || uploadErr.message.includes('PERMISSION_DENIED') || uploadErr.message.includes('API key not valid')) {
+      throw new Error('当前 Gemini API Key 已失效或被 Google 注销（提示: API key was reported as leaked）。请在右上角点击“修改”配置新的 API Key。');
+    }
+    throw uploadErr;
+  }
 
   console.log(`[Gemini] 音频上传成功，文件 URI: ${fileUpload.uri}`);
 
@@ -165,8 +198,10 @@ export async function generateFeedbackFromAudio(audioPath, mimeType, studentName
     return cleanMarkdown(responseText);
   } finally {
     try {
-      console.log(`[Gemini] 清理云端临时文件: ${fileUpload.name}`);
-      await ai.files.delete({ name: fileUpload.name });
+      if (fileUpload && fileUpload.name) {
+        console.log(`[Gemini] 清理云端临时文件: ${fileUpload.name}`);
+        await ai.files.delete({ name: fileUpload.name });
+      }
     } catch (cleanupErr) {
       console.warn(`[Gemini] 清理云端文件警告: ${cleanupErr.message}`);
     }
@@ -174,7 +209,7 @@ export async function generateFeedbackFromAudio(audioPath, mimeType, studentName
 }
 
 /**
- * 辅助清洗任何遗漏的 Markdown 标记及角标
+ * 辅助清洗 Markdown 标记
  */
 function cleanMarkdown(text) {
   if (!text) return '';

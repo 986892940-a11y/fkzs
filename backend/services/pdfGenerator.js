@@ -2,23 +2,25 @@ import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import path from 'path';
 
-// macOS 系统内置中文字体路径
+// macOS 系统内置涵盖完整中文字符集的 Arial Unicode TTF 字体路径
 const CHINESE_FONT_PATH = '/System/Library/Fonts/Supplemental/Arial Unicode.ttf';
 
 /**
- * 优雅美学 PDF 生成引擎（支持圆角色块卡片、高亮 Badge 标签与大图排版）
+ * 语文学科典雅美学 PDF 生成引擎 (支持 16:9 2K 宽屏海报多图嵌入、智能授课内容切拆与排版)
  * @param {Object} params
  * @param {string} params.studentName 学生姓名
- * @param {string} params.feedbackText 反馈纯文本
- * @param {Buffer|string} params.imageBuffer 知识点图片 Buffer 或 Base64
+ * @param {string} params.studentGrade 学生学段 (如 高一 / 初三(中考))
+ * @param {string} params.feedbackText 反馈 Markdown 文本
+ * @param {Buffer|string|Array} params.imageBuffer 知识点图片 Buffer 或 Base64 (支持多图数组)
  * @returns {Promise<Buffer>}
  */
-export function generateFeedbackPDF({ studentName, feedbackText, imageBuffer }) {
+export function generateFeedbackPDF({ studentName, studentGrade, feedbackText, imageBuffer, imagesBase64 }) {
   return new Promise((resolve, reject) => {
     try {
       const doc = new PDFDocument({
         size: 'A4',
-        margins: { top: 35, bottom: 40, left: 40, right: 40 }
+        margins: { top: 42, bottom: 45, left: 35, right: 35 },
+        bufferPages: true
       });
 
       const chunks = [];
@@ -26,51 +28,56 @@ export function generateFeedbackPDF({ studentName, feedbackText, imageBuffer }) 
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.on('error', (err) => reject(err));
 
-      // 加载系统标准中文字体
       if (fs.existsSync(CHINESE_FONT_PATH)) {
         doc.font(CHINESE_FONT_PATH);
-      } else {
-        console.warn('[PDF] 未找到 Arial Unicode.ttf');
       }
 
-      const pageWidth = 515; // 595.28 - 80 边距
-      const startX = 40;
+      const pageWidth = 525;
+      const startX = 35;
+      const PAGE_MAX_Y = 710;
+
+      const checkPageOverflow = (needHeight) => {
+        if (doc.y + needHeight > PAGE_MAX_Y) {
+          doc.addPage();
+          doc.y = 42;
+        }
+      };
 
       // -------------------------------------------------------------
-      // 1. 顶部 Header 优雅深色卡片
+      // 1. 顶部 Header 优雅头卡
       // -------------------------------------------------------------
-      const headerY = 35;
-      const headerHeight = 75;
+      const topTitleY = 42;
+      const topTitleHeight = 62;
       
-      // 绘制顶部靛紫渐变感实心卡片框
-      doc.roundedRect(startX, headerY, pageWidth, headerHeight, 10).fill('#312e81');
+      doc.roundedRect(startX, topTitleY, pageWidth, topTitleHeight, 8).fill('#faf7f2');
+      doc.roundedRect(startX, topTitleY, pageWidth, topTitleHeight, 8).strokeColor('#e5dfd3').lineWidth(1).stroke();
 
-      // 主标题
-      doc.fontSize(20).fillColor('#ffffff').text('语文课后学习反馈', startX + 20, headerY + 16);
+      doc.fontSize(18).fillColor('#1e293b').text('语文课后学习反馈', startX + 16, topTitleY + 12);
       
-      // 日期与学生姓名高亮 Badge 标签
       const dateStr = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
+      const gradeStr = studentGrade ? ` (${studentGrade})` : '';
+      const nameText = `学员：${studentName || '未指定'}${gradeStr}`;
+
+      const badgeWidth = Math.min(230, nameText.length * 11 + 20);
+      doc.roundedRect(startX + 16, topTitleY + 36, badgeWidth, 18, 9).fill('#edf4ef');
+      doc.roundedRect(startX + 16, topTitleY + 36, badgeWidth, 18, 9).strokeColor('#c2d6c6').lineWidth(0.8).stroke();
+      doc.fontSize(9).fillColor('#2d4a34').text(nameText, startX + 24, topTitleY + 40);
+
+      doc.fontSize(9).fillColor('#64748b').text(`生成时间：${dateStr}`, startX + 370, topTitleY + 40, { align: 'right' });
+
+      doc.y = topTitleY + topTitleHeight + 14;
+
+      // -------------------------------------------------------------
+      // 2. 文本解析与模块划分
+      // -------------------------------------------------------------
+      const cleanedRawLines = sanitizeAndFilterLines(feedbackText);
       
-      // 绘制学生姓名白底圆角 Badge
-      const nameText = `学员：${studentName || '未指定'}`;
-      doc.roundedRect(startX + 20, headerY + 44, 110, 20, 4).fill('#ffffff');
-      doc.fontSize(10).fillColor('#312e81').text(nameText, startX + 30, headerY + 49);
-
-      // 日期文案
-      doc.fontSize(10).fillColor('#c7d2fe').text(`生成日期：${dateStr}`, startX + 380, headerY + 49, { align: 'right' });
-
-      doc.y = headerY + headerHeight + 20;
-
-      // -------------------------------------------------------------
-      // 2. 解析文本与模块划分
-      // -------------------------------------------------------------
-      const lines = feedbackText.split('\n');
       const recordLines = [];
       const remainingLines = [];
       let foundReview = false;
 
-      for (const line of lines) {
-        if (line.includes('课堂回顾：') || foundReview) {
+      for (const line of cleanedRawLines) {
+        if (line.includes('课堂回顾：') || line.includes('课堂回顾') || foundReview) {
           foundReview = true;
           remainingLines.push(line);
         } else {
@@ -79,99 +86,80 @@ export function generateFeedbackPDF({ studentName, feedbackText, imageBuffer }) 
       }
 
       // -------------------------------------------------------------
-      // 3. 渲染“课堂记录”独立色块卡片
+      // 3. 渲染“课堂记录”卡片
       // -------------------------------------------------------------
       const recordText = recordLines.join('\n').trim();
       if (recordText) {
-        checkPageOverflow(doc, 60);
+        checkPageOverflow(48);
         const cardY = doc.y;
         
-        // 绘制浅灰蓝卡片背景框
-        doc.roundedRect(startX, cardY, pageWidth, 52, 6).fill('#f1f5f9');
-        // 绘制 4px 深紫高亮左边框
-        doc.roundedRect(startX, cardY, 5, 52, 2).fill('#4338ca');
+        doc.roundedRect(startX, cardY, pageWidth, 44, 6).fill('#f4f7f4');
+        doc.roundedRect(startX, cardY, 4, 44, 2).fill('#275940');
 
-        doc.fontSize(10).fillColor('#475569').text(recordText, startX + 18, cardY + 12, { width: pageWidth - 36, lineGap: 3 });
-        doc.y = cardY + 68;
+        renderParagraphWithColonBold(doc, recordText, startX + 14, cardY + 11, pageWidth - 28, 9.5, '#334155', false);
+        doc.y = cardY + 54;
       }
 
       // -------------------------------------------------------------
-      // 4. 插入“知识点总结大图” (位于课堂记录之后，课堂回顾之前)
+      // 4. 渲染 16:9 2K 宽屏知识海报 (位于“课堂记录”与“课堂回顾”之间)
       // -------------------------------------------------------------
-      if (imageBuffer) {
-        try {
-          let cleanBuffer = imageBuffer;
-          if (typeof imageBuffer === 'string') {
-            const pureBase64 = imageBuffer.replace(/^data:image\/\w+;base64,/, '');
-            cleanBuffer = Buffer.from(pureBase64, 'base64');
-          }
+      const imgBuffersToRender = parseImageBuffersList(imageBuffer, imagesBase64);
 
-          if (Buffer.isBuffer(cleanBuffer) && cleanBuffer.length > 0) {
-            checkPageOverflow(doc, 460);
+      if (imgBuffersToRender.length > 0) {
+        for (let i = 0; i < imgBuffersToRender.length; i++) {
+          const imgBuf = imgBuffersToRender[i];
+          if (!imgBuf) continue;
 
-            // 模块高亮 Badge 标题
+          try {
+            const imgWidth = 460;
+            const imgHeight = 258; // 16:9 比例 (460 / 16 * 9 = 258)
+            checkPageOverflow(imgHeight + 36);
+
             const badgeY = doc.y;
-            doc.roundedRect(startX, badgeY, 190, 24, 5).fill('#4338ca');
-            doc.fontSize(11).fillColor('#ffffff').text('★ 本课核心知识总结卡', startX + 12, badgeY + 6);
-            doc.y = badgeY + 34;
+            doc.roundedRect(startX, badgeY, 220, 20, 10).fill('#275940');
+            const label = imgBuffersToRender.length > 1 
+              ? `❖ 本课核心知识海报 (模块 ${i + 1})` 
+              : '❖ 本课核心中文知识图谱海报';
+            doc.fontSize(9).fillColor('#ffffff').text(label, startX + 12, badgeY + 5);
+            doc.y = badgeY + 26;
 
-            // 图片卡片外框
             const imgY = doc.y;
-            const imgWidth = 430;
-            const imgHeight = 430;
             const imgX = startX + (pageWidth - imgWidth) / 2;
 
-            // 绘制卡片衬底与浅阴影边框
-            doc.roundedRect(imgX - 8, imgY - 8, imgWidth + 16, imgHeight + 16, 12).fill('#fafafa');
-            doc.roundedRect(imgX - 8, imgY - 8, imgWidth + 16, imgHeight + 16, 12).strokeColor('#e2e8f0').lineWidth(1).stroke();
+            doc.roundedRect(imgX - 4, imgY - 4, imgWidth + 8, imgHeight + 8, 6).fill('#faf7f2');
+            doc.roundedRect(imgX - 4, imgY - 4, imgWidth + 8, imgHeight + 8, 6).strokeColor('#e5dfd3').lineWidth(1).stroke();
 
-            // 绘制高清大图
-            doc.image(cleanBuffer, imgX, imgY, { width: imgWidth, height: imgHeight });
+            doc.image(imgBuf, imgX, imgY, { width: imgWidth, height: imgHeight });
             
-            doc.y = imgY + imgHeight + 30;
+            doc.y = imgY + imgHeight + 18;
+          } catch (imgErr) {
+            console.warn('[PDF] 嵌入 16:9 海报告警:', imgErr.message);
           }
-        } catch (imgErr) {
-          console.warn('[PDF] 嵌入图片跳过:', imgErr.message);
         }
       }
 
       // -------------------------------------------------------------
-      // 5. 渲染“课堂回顾与授课模块”（色块卡片与多维高亮）
+      // 5. AST 结构化块解析与智能分拆卡片 (解决授课内容过长切分杂乱)
       // -------------------------------------------------------------
-      let currentSectionText = [];
-      let currentSectionTitle = '';
+      const sections = parseSectionsAST(remainingLines);
 
-      for (let i = 0; i < remainingLines.length; i++) {
-        const line = remainingLines[i].trim();
-        if (!line) continue;
-
-        // 判断是否为新模块的标题 (如：课堂回顾：、1. 散文/小说模块、日积月累：、作业：等)
-        const isHeader = line.endsWith('：') || 
-                         line.startsWith('1.') || 
-                         line.startsWith('2.') || 
-                         line.startsWith('3.') || 
-                         line.startsWith('4.') ||
-                         line.startsWith('课堂回顾') ||
-                         line.startsWith('授课内容') ||
-                         line.startsWith('日积月累') ||
-                         line.startsWith('作业') ||
-                         line.startsWith('考试情况');
-
-        if (isHeader) {
-          // 先渲染前一个搜集到的模块卡片
-          if (currentSectionTitle || currentSectionText.length > 0) {
-            renderModuleCard(doc, startX, pageWidth, currentSectionTitle, currentSectionText);
-            currentSectionText = [];
-          }
-          currentSectionTitle = line;
-        } else {
-          currentSectionText.push(line);
-        }
+      for (const sec of sections) {
+        renderLiteratiCardAST(doc, startX, pageWidth, sec, checkPageOverflow);
       }
 
-      // 渲染最后一个模块
-      if (currentSectionTitle || currentSectionText.length > 0) {
-        renderModuleCard(doc, startX, pageWidth, currentSectionTitle, currentSectionText);
+      // -------------------------------------------------------------
+      // 6. 全局居中页眉 Header
+      // -------------------------------------------------------------
+      const pages = doc.bufferedPageRange();
+      for (let i = 0; i < pages.count; i++) {
+        doc.switchToPage(i);
+
+        // 页眉 Header：居中显示“尘埃落定 · 始见星辰” (9.5pt)
+        doc.fontSize(9.5).fillColor('#64748b').text('尘埃落定 · 始见星辰', startX, 22, {
+          width: pageWidth,
+          align: 'center'
+        });
+        doc.strokeColor('#e2e8f0').lineWidth(0.6).moveTo(startX, 35).lineTo(startX + pageWidth, 35).stroke();
       }
 
       doc.end();
@@ -184,64 +172,265 @@ export function generateFeedbackPDF({ studentName, feedbackText, imageBuffer }) 
 }
 
 /**
- * 辅助函数：绘制一个优雅的模块色块卡片框
+ * 解析图片 Buffer / Base64 / 数组
  */
-function renderModuleCard(doc, startX, pageWidth, title, textLines) {
-  const textContent = textLines.join('\n').trim();
-  const estimatedHeight = Math.max(65, textLines.length * 18 + 45);
+function parseImageBuffersList(imageBuffer, imagesBase64) {
+  const result = [];
 
-  checkPageOverflow(doc, estimatedHeight + 20);
-
-  const cardY = doc.y;
-
-  // 区分不同模块的卡片背景与主题配色
-  let cardBg = '#f8fafc';
-  let badgeBg = '#4f46e5';
-  let borderColor = '#e2e8f0';
-
-  if (title.includes('作业')) {
-    cardBg = '#eff6ff';
-    badgeBg = '#2563eb';
-    borderColor = '#bfdbfe';
-  } else if (title.includes('日积月累')) {
-    cardBg = '#f0fdf4';
-    badgeBg = '#16a34a';
-    borderColor = '#bbf7d0';
-  } else if (title.includes('课堂回顾')) {
-    cardBg = '#faf5ff';
-    badgeBg = '#7c3aed';
-    borderColor = '#e9d5ff';
+  const rawList = [];
+  if (Array.isArray(imagesBase64) && imagesBase64.length > 0) {
+    rawList.push(...imagesBase64);
+  } else if (imageBuffer) {
+    if (Array.isArray(imageBuffer)) {
+      rawList.push(...imageBuffer);
+    } else {
+      rawList.push(imageBuffer);
+    }
   }
 
-  // 1. 绘制整体卡片圆角背景框
-  doc.roundedRect(startX, cardY, pageWidth, estimatedHeight, 10).fill(cardBg);
-  doc.roundedRect(startX, cardY, pageWidth, estimatedHeight, 10).strokeColor(borderColor).lineWidth(1).stroke();
-
-  // 2. 绘制模块标题高亮实心圆角 Badge 标签
-  if (title) {
-    const titleWidth = Math.min(pageWidth - 40, title.length * 13 + 24);
-    doc.roundedRect(startX + 12, cardY + 10, titleWidth, 24, 5).fill(badgeBg);
-    doc.fontSize(10.5).fillColor('#ffffff').text(title, startX + 22, cardY + 16);
+  for (const item of rawList) {
+    if (!item) continue;
+    try {
+      if (Buffer.isBuffer(item) && item.length > 0) {
+        result.push(item);
+      } else if (typeof item === 'string' && item.trim().length > 0) {
+        const pureBase64 = item.replace(/^data:image\/\w+;base64,/, '');
+        const buf = Buffer.from(pureBase64, 'base64');
+        if (buf.length > 0) {
+          result.push(buf);
+        }
+      }
+    } catch (e) {}
   }
 
-  // 3. 渲染正文内容
-  if (textContent) {
-    doc.fontSize(10).fillColor('#334155').text(textContent, startX + 18, cardY + 42, {
-      width: pageWidth - 36,
-      lineGap: 4
-    });
-  }
-
-  // 更新 Y 轴偏移
-  doc.y = cardY + estimatedHeight + 15;
+  return result;
 }
 
 /**
- * 辅助函数：检测页面剩余高度，如不够则换页
+ * 清洗 Markdown 残留符号
  */
-function checkPageOverflow(doc, needHeight) {
-  if (doc.y + needHeight > 780) {
-    doc.addPage();
-    doc.y = 40;
+function cleanMarkdownSymbols(text) {
+  if (!text) return '';
+  return text
+    .replace(/^---+\s*$/gm, '')
+    .replace(/^\*\*\*+\s*$/gm, '')
+    .replace(/^___+\s*$/gm, '')
+    .replace(/\*{1,3}/g, '')
+    .replace(/^#+\s*/gm, '')
+    .replace(/\[\d+\]/g, '')
+    .trim();
+}
+
+/**
+ * 彻底过滤无后文的孤立冒号行
+ */
+function sanitizeAndFilterLines(text) {
+  if (!text) return [];
+  const rawLines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const result = [];
+
+  for (let i = 0; i < rawLines.length; i++) {
+    const line = rawLines[i];
+    const cleaned = cleanMarkdownSymbols(line);
+
+    if (cleaned === '---' || cleaned === '***' || cleaned === '___') {
+      continue;
+    }
+
+    const isColonOnlyTitle = (cleaned.endsWith('：') || cleaned.endsWith(':')) && cleaned.length < 16;
+    
+    if (isColonOnlyTitle) {
+      const hasNextContent = (i + 1 < rawLines.length) && 
+                             !rawLines[i+1].startsWith('#') && 
+                             !rawLines[i+1].includes('：') &&
+                             cleanMarkdownSymbols(rawLines[i+1]).length > 0;
+      
+      if (!hasNextContent) {
+        continue;
+      }
+    }
+    result.push(line);
+  }
+
+  return result;
+}
+
+/**
+ * AST 文档块结构化解析器
+ */
+function parseSectionsAST(lines) {
+  const sections = [];
+  let currentTopSec = null;
+
+  for (const rawLine of lines) {
+    const line = cleanMarkdownSymbols(rawLine.trim());
+    if (!line || line === '---' || line === '***') continue;
+
+    const isTopModule = line.startsWith('课堂回顾') || 
+                        line.startsWith('授课内容') ||
+                        line.startsWith('典型例题') ||
+                        line.startsWith('考点拆解') ||
+                        line.startsWith('学员掌握情况') ||
+                        line.startsWith('掌握情况') ||
+                        line.startsWith('课后作业') ||
+                        line.startsWith('作业') ||
+                        line.startsWith('核心金句') ||
+                        line.startsWith('名言');
+
+    if (isTopModule) {
+      if (currentTopSec && currentTopSec.lines.length > 0) {
+        sections.push(currentTopSec);
+      }
+      currentTopSec = {
+        title: line.replace(/：$/, ''),
+        lines: []
+      };
+    } else {
+      if (!currentTopSec) {
+        currentTopSec = { title: '授课详情', lines: [] };
+      }
+      currentTopSec.lines.push(line);
+    }
+  }
+
+  if (currentTopSec && currentTopSec.lines.length > 0) {
+    sections.push(currentTopSec);
+  }
+
+  return sections.filter(sec => sec.lines.length > 0);
+}
+
+/**
+ * 渲染宣纸 AST 顶级主卡片（针对过长的“授课内容”，支持智能按组切拆分卡，防止杂乱断行）
+ */
+function renderLiteratiCardAST(doc, startX, pageWidth, sec, checkPageOverflow) {
+  const title = sec.title || '';
+  const lines = sec.lines || [];
+
+  if (lines.length === 0) return;
+
+  // 如果“授课内容”项目极多 (>6条)，按逻辑切分为子卡片渲染，保证排版极其工整！
+  const lineGroups = groupLinesForCleanLayout(lines);
+
+  lineGroups.forEach((group, idx) => {
+    const cardTitle = idx === 0 ? title : (title ? `${title} (续)` : '');
+    renderSingleSubCard(doc, startX, pageWidth, cardTitle, group, checkPageOverflow);
+  });
+}
+
+/**
+ * 将多行文本按 6-8 行进行智能优雅分组，防止单卡片过长溢出切分杂乱
+ */
+function groupLinesForCleanLayout(lines) {
+  const groups = [];
+  let currentGroup = [];
+
+  for (const line of lines) {
+    currentGroup.push(line);
+    if (currentGroup.length >= 7 || (isSubHeaderLine(line) && currentGroup.length >= 4)) {
+      groups.push(currentGroup);
+      currentGroup = [];
+    }
+  }
+
+  if (currentGroup.length > 0) {
+    groups.push(currentGroup);
+  }
+
+  return groups;
+}
+
+/**
+ * 渲染单个精美宣纸子卡片
+ */
+function renderSingleSubCard(doc, startX, pageWidth, title, lines, checkPageOverflow) {
+  doc.fontSize(9.8);
+  let contentHeight = 0;
+  for (const l of lines) {
+    if (l.startsWith('>')) {
+      contentHeight += 28;
+    } else if (isSubHeaderLine(l)) {
+      contentHeight += 20;
+    } else {
+      contentHeight += doc.heightOfString(cleanMarkdownSymbols(l), { width: pageWidth - 32, lineGap: 4 }) + 4;
+    }
+  }
+
+  const cardPaddingTop = title ? 26 : 12;
+  const cardHeight = Math.max(40, contentHeight + cardPaddingTop + 12);
+
+  checkPageOverflow(cardHeight);
+
+  const cardY = doc.y;
+  const cardBg = '#faf8f3';
+  const borderColor = '#e7e0d3';
+
+  doc.roundedRect(startX, cardY, pageWidth, cardHeight, 8).fill(cardBg);
+  doc.roundedRect(startX, cardY, pageWidth, cardHeight, 8).strokeColor(borderColor).lineWidth(0.9).stroke();
+
+  let currentY = cardY + 12;
+  if (title) {
+    doc.fontSize(13.5).fillColor('#1e293b').text(`❖  ${title}`, startX + 16, currentY);
+    currentY += 24;
+  }
+
+  for (const l of lines) {
+    if (l.startsWith('>')) {
+      const quoteText = cleanMarkdownSymbols(l.replace(/^>\s*/, ''));
+      doc.roundedRect(startX + 14, currentY, pageWidth - 28, 24, 4).fill('#f2f7f3');
+      doc.roundedRect(startX + 14, currentY, 3, 24, 1).fill('#275940');
+      doc.fontSize(9.5).fillColor('#1e3a2b').text(`“ ${quoteText} ”`, startX + 24, currentY + 5);
+      currentY += 28;
+    } else if (isSubHeaderLine(l)) {
+      const subTitleText = cleanMarkdownSymbols(l);
+      doc.fontSize(11).fillAndStroke('#8c2d19', '#8c2d19').lineWidth(0.35).text(subTitleText, startX + 16, currentY);
+      doc.lineWidth(1).fillColor('#334155');
+      currentY += 20;
+    } else {
+      renderParagraphWithColonBold(doc, l, startX + 16, currentY, pageWidth - 32, 9.5, '#334155', true);
+      const textH = doc.heightOfString(cleanMarkdownSymbols(l), { width: pageWidth - 32, lineGap: 4 });
+      currentY += textH + 4;
+    }
+  }
+
+  doc.y = Math.min(695, cardY + cardHeight + 12);
+}
+
+function isSubHeaderLine(line) {
+  const clean = cleanMarkdownSymbols(line);
+  return /^考点[一二三四五六七八九十\d]+/.test(clean) || 
+         /^[一二三四五六七八九十]+[\.\、\s]/.test(clean) || 
+         (/^\d+[\.\、\s]/.test(clean) && clean.length < 28) ||
+         clean.startsWith('思维优势') ||
+         clean.startsWith('优势闪光点') ||
+         clean.startsWith('薄弱环节');
+}
+
+function renderParagraphWithColonBold(doc, text, x, y, width, fontSize = 9.5, defaultColor = '#334155', needIndent = true) {
+  const cleanText = cleanMarkdownSymbols(text);
+  doc.fontSize(fontSize);
+
+  const isListItem = cleanText.startsWith('-') || /^[一二三四五六七八九十\d]+[\.\、\s]/.test(cleanText) || /^考点[一二三四五六七八九十\d]+/.test(cleanText);
+  const drawX = (needIndent && !isListItem) ? x + 16 : x;
+  const drawWidth = (needIndent && !isListItem) ? width - 16 : width;
+
+  const colonIdx = cleanText.indexOf('：') !== -1 ? cleanText.indexOf('：') : cleanText.indexOf(':');
+
+  if (colonIdx > 0 && colonIdx < 35) {
+    const colonPrefix = cleanText.slice(0, colonIdx + 1);
+    const colonSuffix = cleanText.slice(colonIdx + 1);
+
+    doc.text('', drawX, y, { continued: true });
+    doc.fontSize(10).fillAndStroke('#0f172a', '#0f172a').lineWidth(0.35).text(colonPrefix, { continued: true });
+    doc.lineWidth(1);
+    doc.fontSize(fontSize).fillColor(defaultColor).text(colonSuffix, {
+      width: drawWidth,
+      lineGap: 4
+    });
+  } else {
+    doc.fillColor(defaultColor).text(cleanText, drawX, y, {
+      width: drawWidth,
+      lineGap: 4
+    });
   }
 }
