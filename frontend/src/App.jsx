@@ -17,8 +17,6 @@ export default function App() {
   const [studentGrade, setStudentGrade] = useState('高一');
   const [customThemePrompt, setCustomThemePrompt] = useState('宋代山水画意境');
   const [transcriptText, setTranscriptText] = useState('');
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('gemini_api_key') || '');
-  const [showApiKeyInput, setShowApiKeyInput] = useState(!localStorage.getItem('gemini_api_key'));
   
   // 常用主题列表 (支持用户点击 + 自定义添加)
   const [quickThemes, setQuickThemes] = useState(() => {
@@ -62,18 +60,6 @@ export default function App() {
     }
   };
 
-  const handleSaveApiKey = (e) => {
-    e.preventDefault();
-    localStorage.setItem('gemini_api_key', apiKey.trim());
-    setShowApiKeyInput(false);
-  };
-
-  const handleClearApiKey = () => {
-    localStorage.removeItem('gemini_api_key');
-    setApiKey('');
-    setShowApiKeyInput(true);
-  };
-
   // 添加用户常用主题快捷标签
   const handleAddCustomQuickTheme = () => {
     const themeName = window.prompt('请输入您常用的主题名称（例如：大鱼海棠、赛博朋克...）：');
@@ -107,12 +93,6 @@ export default function App() {
 
   // 2. 抓取选中的音频并自动转文字
   const handleTranscribeSelectedMemo = async () => {
-    if (!apiKey) {
-      setError('请先在右上角配置并保存您的 Gemini API Key');
-      setShowApiKeyInput(true);
-      return;
-    }
-
     setIsTranscribing(true);
     setError('');
     const targetName = selectedMemo ? selectedMemo.name : '最新扫描到的音频';
@@ -123,7 +103,6 @@ export default function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          apiKey: apiKey.trim(),
           studentName: studentName.trim(),
           memoPath: selectedMemo ? selectedMemo.path : null
         })
@@ -150,18 +129,11 @@ export default function App() {
     const file = e.target.files[0];
     if (!file) return;
 
-    if (!apiKey) {
-      setError('请先在右上角配置并保存您的 Gemini API Key');
-      setShowApiKeyInput(true);
-      return;
-    }
-
     setIsTranscribing(true);
     setError('');
     setRecordingStatusNotice(`正在上传“${file.name}”并转写为文字...`);
 
     const formData = new FormData();
-    formData.append('apiKey', apiKey.trim());
     formData.append('studentName', studentName.trim());
     formData.append('audioFile', file);
 
@@ -412,7 +384,7 @@ export default function App() {
 
   return (
     <div className="app-container">
-      {/* 顶部 Header 升级 */}
+      {/* 顶部 Header */}
       <header className="header-bar">
         <div className="brand-title">
           <div className="brand-logo-badge">⚡</div>
@@ -426,52 +398,7 @@ export default function App() {
             </p>
           </div>
         </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
-          <button
-            onClick={() => setShowApiKeyInput(true)}
-            className={`api-status-badge ${apiKey ? 'connected' : 'warning'}`}
-            title="点击配置 Gemini API Key"
-          >
-            <span className="status-dot"></span>
-            <span>{apiKey ? 'Gemini 3.5 Ready' : '未配置 API Key'}</span>
-          </button>
-        </div>
       </header>
-
-      {/* API Key Modal 弹窗 */}
-      {showApiKeyInput && (
-        <div className="modal-overlay" onClick={() => apiKey && setShowApiKeyInput(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3 style={{ marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              🔑 配置 Gemini API Key
-            </h3>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1.2rem' }}>
-              请输入您的 Google Gemini API Key 以启用全自动语音转写与 AI 图文课后反馈生成。
-            </p>
-            <form onSubmit={handleSaveApiKey} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <input
-                type="password"
-                placeholder="AIzaSy..."
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                className="form-input"
-                autoFocus
-              />
-              <div style={{ display: 'flex', gap: '0.6rem', justifyContent: 'flex-end' }}>
-                {apiKey && (
-                  <button type="button" onClick={handleClearApiKey} className="btn-secondary" style={{ color: 'var(--danger)' }}>
-                    清除 Key
-                  </button>
-                )}
-                <button type="submit" className="btn-cta" style={{ width: 'auto', padding: '0.6rem 1.4rem', fontSize: '0.9rem' }}>
-                  保存并关闭
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* 核心工作区 */}
       <main className="grid-cols-2">
