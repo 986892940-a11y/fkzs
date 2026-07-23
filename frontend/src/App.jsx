@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import './App.css';
 
 const API_BASE = 'http://127.0.0.1:5001/api';
 
@@ -39,7 +40,6 @@ export default function App() {
   // 输出与 UI 状态
   const [loading, setLoading] = useState(false);
   const [pdfExporting, setPdfExporting] = useState(false);
-  const [loadingStatus, setLoadingStatus] = useState('');
   const [generatedFeedback, setGeneratedFeedback] = useState('');
   const [knowledgeImageBase64, setKnowledgeImageBase64] = useState('');
   const [knowledgeImagesBase64, setKnowledgeImagesBase64] = useState([]);
@@ -96,9 +96,9 @@ export default function App() {
       const res = await fetch(`${API_BASE}/launch-voice-memos`, { method: 'POST' });
       const data = await res.json();
       if (data.success) {
-        setRecordingStatusNotice('✨ 已调起语音备忘录！录音完成后点上方“选择本地音频文件”或从列表抓取。');
+        setRecordingStatusNotice('✨ 已调起语音备忘录！录音完成后点上方“选择本地音频”或从列表抓取。');
       } else {
-        setRecordingStatusNotice('可以手动打开 macOS 语音备忘录或直接点击右侧“导入录音文件”。');
+        setRecordingStatusNotice('可以手动打开 macOS 语音备忘录或直接点击“导入本地音频”。');
       }
     } catch (err) {
       setRecordingStatusNotice('请确认后台服务正在正常运行。');
@@ -115,8 +115,8 @@ export default function App() {
 
     setIsTranscribing(true);
     setError('');
-    const targetName = selectedMemo ? selectedMemo.name : '扫描到的最新音频';
-    setRecordingStatusNotice(`正在解析“${targetName}”并转为逐字稿...`);
+    const targetName = selectedMemo ? selectedMemo.name : '最新扫描到的音频';
+    setRecordingStatusNotice(`正在解析“${targetName}”并转为文本...`);
 
     try {
       const res = await fetch(`${API_BASE}/transcribe-memo`, {
@@ -134,7 +134,7 @@ export default function App() {
         setTranscriptText(data.transcript);
         setRecordingStatusNotice(`🎉 成功抓取“${data.filename || '音频文件'}”，已自动填入文本框！`);
       } else {
-        setError(data.message || '系统受限于 macOS 权限未读到文件，请使用右侧【手动选择音频文件】');
+        setError(data.message || '受限于 macOS 权限未能读取文件，请使用【手动选择音频文件】');
         setRecordingStatusNotice('');
       }
     } catch (err) {
@@ -196,7 +196,6 @@ export default function App() {
     setGeneratedFeedback('');
     setKnowledgeImageBase64('');
     setKnowledgeImagesBase64([]);
-    setLoadingStatus('正在生成反馈');
 
     const formData = new FormData();
     formData.append('type', 'text');
@@ -228,7 +227,6 @@ export default function App() {
       setError('无法连接本地后端服务。请确认后台服务正在正常运行。');
     } finally {
       setLoading(false);
-      setLoadingStatus('');
     }
   };
 
@@ -245,10 +243,10 @@ export default function App() {
     if (!generatedFeedback) return;
 
     const dateStr = new Date().toISOString().slice(0, 10);
-    const filename = `语文课后反馈纯文本档案_${studentName.trim() || '学员'}_${studentGrade}_${dateStr}.txt`;
+    const filename = `课后学习反馈纯文本_${studentName.trim() || '学员'}_${studentGrade}_${dateStr}.txt`;
 
     let fullTextContent = `========================================================\n`;
-    fullTextContent += `        语文课后学习反馈档案 (纯文本档案版)\n`;
+    fullTextContent += `        课后学习反馈档案 (v2.0 纯文本档案版)\n`;
     fullTextContent += `========================================================\n`;
     fullTextContent += `【学员姓名】：${studentName.trim() || '未指定'}\n`;
     fullTextContent += `【学员学段】：${studentGrade}\n`;
@@ -268,7 +266,7 @@ export default function App() {
     }
 
     fullTextContent += `========================================================\n`;
-    fullTextContent += `归档说明：尘埃落定·始见星辰\n`;
+    fullTextContent += `尘埃落定 · 始见星辰\n`;
     fullTextContent += `========================================================\n`;
 
     const blob = new Blob([fullTextContent], { type: 'text/plain;charset=utf-8' });
@@ -306,7 +304,7 @@ export default function App() {
       }
 
       const blob = await res.blob();
-      const defaultFilename = `语文课后反馈_${studentName.trim() || '学员'}_${studentGrade}_${new Date().toISOString().slice(0, 10)}.pdf`;
+      const defaultFilename = `课后反馈_${studentName.trim() || '学员'}_${studentGrade}_${new Date().toISOString().slice(0, 10)}.pdf`;
 
       if (window.electronAPI && typeof window.electronAPI.savePdf === 'function') {
         const reader = new FileReader();
@@ -348,7 +346,7 @@ export default function App() {
       const suffix = cleanText.slice(colonIndex + 1);
       return (
         <span>
-          <strong style={{ color: 'var(--primary)', fontWeight: '700' }}>{prefix}</strong>
+          <strong style={{ color: 'var(--accent-cyan)', fontWeight: '700' }}>{prefix}</strong>
           {suffix}
         </span>
       );
@@ -374,25 +372,25 @@ export default function App() {
     }
 
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.4rem' }}>
         {recordLines.length > 0 && (
-          <div style={{ whiteSpace: 'pre-wrap', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: 'var(--radius-md)', borderLeft: '4px solid var(--accent)' }}>
+          <div style={{ whiteSpace: 'pre-wrap', background: 'rgba(255,255,255,0.02)', padding: '1.2rem', borderRadius: 'var(--radius-md)', borderLeft: '4px solid var(--accent-cyan)' }}>
             {recordLines.map((l, idx) => <div key={idx}>{renderFormattedMarkdownLine(l)}</div>)}
           </div>
         )}
 
         {knowledgeImagesBase64.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
             {knowledgeImagesBase64.map((imgBase64, imgIdx) => (
-              <div key={imgIdx} style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid var(--panel-border-hover)', borderRadius: 'var(--radius-md)', padding: '1rem', textAlign: 'center' }}>
-                <div style={{ fontSize: '0.9rem', color: 'var(--accent)', fontWeight: '600', marginBottom: '0.6rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+              <div key={imgIdx} className="knowledge-image-card" style={{ padding: '1rem', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.88rem', color: 'var(--accent-cyan)', fontWeight: '600', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                  16:9 2K 知识海报 {knowledgeImagesBase64.length > 1 ? `(模块 ${imgIdx + 1})` : ''} · 主题: {customThemePrompt || '宋代山水画意境'}
+                  2K AI 知识高精海报 {knowledgeImagesBase64.length > 1 ? `(模块 ${imgIdx + 1})` : ''} · 主题: {customThemePrompt || '宋代山水画意境'}
                 </div>
                 <img
                   src={`data:image/jpeg;base64,${imgBase64}`}
                   alt={`知识海报 ${imgIdx + 1}`}
-                  style={{ width: '100%', borderRadius: 'var(--radius-sm)', objectFit: 'contain', boxShadow: '0 10px 25px rgba(0,0,0,0.6)', cursor: 'pointer' }}
+                  style={{ width: '100%', borderRadius: 'var(--radius-sm)', objectFit: 'contain' }}
                 />
               </div>
             ))}
@@ -400,9 +398,9 @@ export default function App() {
         )}
 
         {restLines.length > 0 && (
-          <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.8' }}>
+          <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.85', fontSize: '0.96rem' }}>
             {restLines.map((l, idx) => (
-              <div key={idx} style={{ margin: '0.3rem 0', textIndent: (l.startsWith('#') || l.endsWith('：')) ? '0' : '2em' }}>
+              <div key={idx} style={{ margin: '0.4rem 0', textIndent: (l.startsWith('#') || l.endsWith('：')) ? '0' : '1.5em' }}>
                 {renderFormattedMarkdownLine(l)}
               </div>
             ))}
@@ -414,124 +412,172 @@ export default function App() {
 
   return (
     <div className="app-container">
-      {/* 顶部 Header */}
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1>反馈助手</h1>
-          <p style={{ color: 'var(--text-secondary)', marginTop: '0.25rem', fontSize: '0.95rem' }}>
-            更懂你，更懂学生
-          </p>
+      {/* 顶部 Header 升级 */}
+      <header className="header-bar">
+        <div className="brand-title">
+          <div className="brand-logo-badge">⚡</div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <h1 style={{ margin: 0, fontSize: '1.6rem' }}>反馈助手</h1>
+              <span className="version-pill">v2.0 Pro</span>
+            </div>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.84rem', marginTop: '0.1rem' }}>
+              智绘课后 · 更懂教学，更懂学生
+            </p>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+          <button
+            onClick={() => setShowApiKeyInput(true)}
+            className={`api-status-badge ${apiKey ? 'connected' : 'warning'}`}
+            title="点击配置 Gemini API Key"
+          >
+            <span className="status-dot"></span>
+            <span>{apiKey ? 'Gemini 3.5 Ready' : '未配置 API Key'}</span>
+          </button>
         </div>
       </header>
 
+      {/* API Key Modal 弹窗 */}
+      {showApiKeyInput && (
+        <div className="modal-overlay" onClick={() => apiKey && setShowApiKeyInput(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              🔑 配置 Gemini API Key
+            </h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1.2rem' }}>
+              请输入您的 Google Gemini API Key 以启用全自动语音转写与 AI 图文课后反馈生成。
+            </p>
+            <form onSubmit={handleSaveApiKey} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <input
+                type="password"
+                placeholder="AIzaSy..."
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                className="form-input"
+                autoFocus
+              />
+              <div style={{ display: 'flex', gap: '0.6rem', justifyContent: 'flex-end' }}>
+                {apiKey && (
+                  <button type="button" onClick={handleClearApiKey} className="btn-secondary" style={{ color: 'var(--danger)' }}>
+                    清除 Key
+                  </button>
+                )}
+                <button type="submit" className="btn-cta" style={{ width: 'auto', padding: '0.6rem 1.4rem', fontSize: '0.9rem' }}>
+                  保存并关闭
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* 核心工作区 */}
       <main className="grid-cols-2">
-        {/* 左侧：学生信息、自由主题与音频入框 */}
-        <section className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+        {/* 左侧控制区 */}
+        <section className="glass-panel form-section">
           
           {/* 1. 学生姓名与学段 */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '0.75rem' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-              <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: '600' }}>
-                学生姓名：
-              </label>
-              <input
-                type="text"
-                placeholder="请输入学生姓名（如：彭梓辰）"
-                value={studentName}
-                onChange={(e) => setStudentName(e.target.value)}
-                className="form-input"
-              />
+          <div>
+            <div className="section-title">
+              <span className="icon">👤</span> 学生基本信息
             </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '0.75rem', marginTop: '0.5rem' }}>
+              <div>
+                <label className="form-label">学生姓名</label>
+                <input
+                  type="text"
+                  placeholder="如：彭梓辰"
+                  value={studentName}
+                  onChange={(e) => setStudentName(e.target.value)}
+                  className="form-input"
+                />
+              </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-              <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: '600' }}>
-                学生学段：
-              </label>
-              <select
-                value={studentGrade}
-                onChange={(e) => setStudentGrade(e.target.value)}
-                className="form-input"
-                style={{ background: 'rgba(21, 16, 42, 0.9)', cursor: 'pointer' }}
-              >
-                <option value="初一">初一</option>
-                <option value="初一(自招)">初一 (自招)</option>
-                <option value="初二">初二</option>
-                <option value="初二(自招)">初二 (自招)</option>
-                <option value="初三(中考)">初三 (中考)</option>
-                <option value="初三(自招)">初三 (自招)</option>
-                <option value="高一">高一</option>
-                <option value="高二">高二</option>
-                <option value="高三(高考)">高三 (高考)</option>
-                <option value="高三(春考)">高三 (春考)</option>
-              </select>
+              <div>
+                <label className="form-label">学段</label>
+                <select
+                  value={studentGrade}
+                  onChange={(e) => setStudentGrade(e.target.value)}
+                  className="form-select"
+                  style={{ width: '100%' }}
+                >
+                  <option value="初一">初一</option>
+                  <option value="初一(自招)">初一 (自招)</option>
+                  <option value="初二">初二</option>
+                  <option value="初二(自招)">初二 (自招)</option>
+                  <option value="初三(中考)">初三 (中考)</option>
+                  <option value="初三(自招)">初三 (自招)</option>
+                  <option value="高一">高一</option>
+                  <option value="高二">高二</option>
+                  <option value="高三(高考)">高三 (高考)</option>
+                  <option value="高三(春考)">高三 (春考)</option>
+                </select>
+              </div>
             </div>
           </div>
 
-          {/* 2. 自由视觉主题输入框 + 可扩展快捷标签 (+号添加自定义主题) */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-            <label style={{ fontSize: '0.88rem', color: 'var(--accent)', fontWeight: '600' }}>
-              知识点总结图艺术主题/风格 (自由输入)：
-            </label>
+          {/* 2. 知识点总结图艺术主题 */}
+          <div>
+            <div className="section-title">
+              <span className="icon">🎨</span> 知识点图谱主题/视觉风格
+            </div>
             <input
               type="text"
-              placeholder="输入相关主题（如：疯狂动物城、宋代山水画、黑神话悟空、水彩插画...）"
+              placeholder="输入相关主题（如：疯狂动物城、宋代山水画、黑神话悟空...）"
               value={customThemePrompt}
               onChange={(e) => setCustomThemePrompt(e.target.value)}
               className="form-input"
-              style={{ fontSize: '0.9rem' }}
+              style={{ marginTop: '0.5rem' }}
             />
-            {/* 快捷点选标签 + (+)号新增常用主题 */}
-            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.2rem' }}>
+            {/* 快捷点选 Chips */}
+            <div className="quick-themes-grid">
               {quickThemes.map((tag) => (
                 <button
                   key={tag}
                   type="button"
                   onClick={() => setCustomThemePrompt(tag)}
-                  style={{
-                    fontSize: '0.75rem',
-                    padding: '0.15rem 0.5rem',
-                    background: customThemePrompt === tag ? 'rgba(6, 182, 212, 0.25)' : 'rgba(255,255,255,0.06)',
-                    border: customThemePrompt === tag ? '1px solid var(--accent)' : '1px solid var(--panel-border)',
-                    borderRadius: '12px',
-                    color: customThemePrompt === tag ? 'var(--accent)' : 'var(--text-secondary)',
-                    cursor: 'pointer'
-                  }}
+                  className={`theme-chip ${customThemePrompt === tag ? 'active' : ''}`}
                 >
+                  {customThemePrompt === tag && '✓ '}
                   {tag}
                 </button>
               ))}
               <button
                 type="button"
                 onClick={handleAddCustomQuickTheme}
-                style={{
-                  fontSize: '0.75rem',
-                  padding: '0.15rem 0.5rem',
-                  background: 'rgba(16, 185, 129, 0.15)',
-                  border: '1px stroke var(--success)',
-                  borderRadius: '12px',
-                  color: 'var(--success)',
-                  cursor: 'pointer',
-                  fontWeight: '600'
-                }}
-                title="点击添加您常用的自定义主题"
+                className="theme-chip"
+                style={{ borderColor: 'rgba(16, 185, 129, 0.4)', color: '#34d399' }}
               >
-                + 添加常用主题
+                + 自定义常用主题
               </button>
             </div>
           </div>
 
-          {/* 3. 音频录制与上传通道 */}
-          <div style={{ background: 'rgba(6, 182, 212, 0.05)', border: '1px solid rgba(6, 182, 212, 0.2)', borderRadius: 'var(--radius-md)', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '0.9rem', fontWeight: '600', color: 'var(--accent)' }}>
-                🎙️ 录音转写通道
+          {/* 3. 音频转写通道 */}
+          <div>
+            <div className="section-title" style={{ justifyContent: 'space-between' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span className="icon">🎙️</span> 课堂音频通道
               </span>
-              <div style={{ display: 'flex', gap: '0.4rem' }}>
-                <button onClick={handleLaunchVoiceMemos} className="btn-secondary" style={{ padding: '0.15rem 0.5rem', fontSize: '0.75rem', borderColor: 'var(--accent)', color: 'var(--accent)' }}>
-                  唤起语音备忘录
+              {isTranscribing && (
+                <div className="waveform-container">
+                  <div className="waveform-bar"></div>
+                  <div className="waveform-bar"></div>
+                  <div className="waveform-bar"></div>
+                  <div className="waveform-bar"></div>
+                  <div className="waveform-bar"></div>
+                </div>
+              )}
+            </div>
+
+            <div className="audio-hub-box" style={{ marginTop: '0.5rem' }}>
+              <div className="audio-actions-row">
+                <button onClick={handleLaunchVoiceMemos} className="audio-btn">
+                  🎙️ 唤起语音备忘录
                 </button>
-                <button onClick={() => fileInputRef.current && fileInputRef.current.click()} className="btn-secondary" style={{ padding: '0.15rem 0.5rem', fontSize: '0.75rem' }}>
+                <button onClick={() => fileInputRef.current && fileInputRef.current.click()} className="audio-btn">
                   📁 选本地音频
                 </button>
                 <input
@@ -542,142 +588,168 @@ export default function App() {
                   style={{ display: 'none' }}
                 />
               </div>
-            </div>
 
-            <div style={{ maxHeight: '100px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.4rem', background: 'rgba(0,0,0,0.2)', padding: '0.4rem', borderRadius: 'var(--radius-sm)' }}>
-              {voiceMemos.length > 0 ? (
-                voiceMemos.map((memo) => (
-                  <div
-                    key={memo.id}
-                    onClick={() => setSelectedMemo(memo)}
-                    style={{
-                      display: 'flex',
-                      justify: 'space-between',
-                      alignItems: 'center',
-                      padding: '0.4rem 0.6rem',
-                      background: selectedMemo?.id === memo.id ? 'rgba(6, 182, 212, 0.15)' : 'rgba(255,255,255,0.03)',
-                      border: selectedMemo?.id === memo.id ? '1px solid var(--accent)' : '1px solid transparent',
-                      borderRadius: '4px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <div style={{ fontWeight: '500', fontSize: '0.85rem', color: selectedMemo?.id === memo.id ? 'var(--accent)' : 'var(--text-primary)' }}>
-                      {memo.name}
+              {/* 录音列表展示 */}
+              <div style={{ maxHeight: '110px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                {voiceMemos.length > 0 ? (
+                  voiceMemos.map((memo) => (
+                    <div
+                      key={memo.id}
+                      onClick={() => setSelectedMemo(memo)}
+                      className={`list-item-card ${selectedMemo?.id === memo.id ? 'selected' : ''}`}
+                      style={{ padding: '0.5rem 0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                    >
+                      <div style={{ fontSize: '0.85rem', fontWeight: '500', color: selectedMemo?.id === memo.id ? 'var(--accent-cyan)' : 'var(--text-primary)' }}>
+                        🎵 {memo.name}
+                      </div>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        {(memo.size / 1024 / 1024).toFixed(1)}M
+                      </span>
                     </div>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                      {(memo.size / 1024 / 1024).toFixed(1)}M
-                    </span>
+                  ))
+                ) : (
+                  <div style={{ padding: '0.6rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                    提示：可唤起语音备忘录录音，或点击“📁 选本地音频”直接导入音频文件。
                   </div>
-                ))
-              ) : (
-                <div style={{ padding: '0.8rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                  提示：可点击“唤起语音备忘录”录音，或点“📁 选本地音频”直接选录音文件。
+                )}
+              </div>
+
+              <button
+                onClick={handleTranscribeSelectedMemo}
+                disabled={isTranscribing}
+                className="btn-secondary"
+                style={{ width: '100%', justifyContent: 'center', padding: '0.65rem', background: 'rgba(6, 182, 212, 0.1)', borderColor: 'rgba(6, 182, 212, 0.3)', color: '#38bdf8' }}
+              >
+                {isTranscribing ? '正在提取转写中...' : selectedMemo ? `⚡ 一键转写【${selectedMemo.name}】` : '⚡ 抓取或转写选中音频'}
+              </button>
+
+              {recordingStatusNotice && (
+                <div className="audio-notice-bar">
+                  <span>{recordingStatusNotice}</span>
                 </div>
               )}
             </div>
-
-            <button
-              onClick={handleTranscribeSelectedMemo}
-              disabled={isTranscribing}
-              className="btn-primary"
-              style={{ padding: '0.65rem', fontSize: '0.9rem', background: 'linear-gradient(135deg, var(--accent) 0%, var(--primary) 100%)' }}
-            >
-              {isTranscribing ? '正在转化文字...' : selectedMemo ? `⚡ 抓取【${selectedMemo.name}】转写` : '⚡ 抓取或转写选中音频'}
-            </button>
-
-            {recordingStatusNotice && (
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', background: 'rgba(0,0,0,0.25)', padding: '0.4rem 0.6rem', borderRadius: '4px' }}>
-                {recordingStatusNotice}
-              </div>
-            )}
           </div>
 
           {/* 4. 逐字稿文本框 */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', flex: 1 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: '600' }}>
-                课堂录音逐字稿文本框：
+              <label className="form-label" style={{ margin: 0 }}>
+                📝 课堂逐字稿文本
               </label>
-              {transcriptText && (
-                <button onClick={() => setTranscriptText('')} style={{ fontSize: '0.75rem', color: 'var(--text-muted)', background: 'transparent' }}>
-                  清空文本
-                </button>
-              )}
+              <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  字数: {transcriptText.length}
+                </span>
+                {transcriptText && (
+                  <button onClick={() => setTranscriptText('')} style={{ fontSize: '0.75rem', color: 'var(--text-muted)', background: 'transparent' }}>
+                    清空
+                  </button>
+                )}
+              </div>
             </div>
             <textarea
-              placeholder="录音转换文字后将自动填入此处，亦可在此直接粘贴或修改逐字稿..."
+              placeholder="音频转换文字后将自动填入此处，亦可在此直接粘贴或修改逐字稿..."
               value={transcriptText}
               onChange={(e) => setTranscriptText(e.target.value)}
               className="form-input"
-              style={{ height: '150px', resize: 'none', lineHeight: '1.6', fontSize: '0.9rem' }}
+              style={{ height: '140px', resize: 'none', lineHeight: '1.6', fontSize: '0.9rem' }}
             />
           </div>
 
+          {/* 核心主生成按钮 */}
           <button
             onClick={handleGenerate}
             disabled={loading || !transcriptText || !transcriptText.trim()}
-            className="btn-primary"
-            style={{ width: '100%', padding: '0.85rem', fontSize: '1.05rem', marginTop: 'auto', background: 'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)' }}
+            className="btn-cta"
           >
-            {loading ? '正在分析并生成图文...' : '生成图文课后反馈'}
+            {loading ? '⚡ AI 双引擎生成中...' : '✨ 生成图文课后反馈 (AI 物理引擎)'}
           </button>
         </section>
 
-        {/* 右侧：生成与输出区域 */}
-        <section className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', minHeight: '520px', position: 'relative' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ fontSize: '1.15rem' }}>课后学习反馈</h3>
+        {/* 右侧反馈展示区 */}
+        <section className="glass-panel result-arena">
+          <div className="result-header">
+            <h3>📊 课后学习反馈报告</h3>
             
             {generatedFeedback && (
-              <div style={{ display: 'flex', gap: '0.4rem' }}>
-                <button onClick={handleExportFullText} className="btn-secondary" style={{ padding: '0.4rem 0.7rem', fontSize: '0.82rem', borderColor: 'var(--accent)', color: 'var(--accent)' }}>
-                  导出纯文本 (.txt)
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button onClick={handleExportFullText} className="btn-secondary">
+                  📝 纯文本
                 </button>
-                <button onClick={handleCopy} className="btn-secondary" style={{ padding: '0.4rem 0.7rem', fontSize: '0.82rem' }}>
-                  {copied ? '已复制!' : '复制反馈'}
+                <button onClick={handleCopy} className="btn-secondary">
+                  {copied ? '✓ 已复制' : '📋 复制'}
                 </button>
-                <button onClick={handleExportPDF} disabled={pdfExporting} className="btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.82rem' }}>
-                  {pdfExporting ? '导出中...' : '保存/导出PDF'}
+                <button onClick={handleExportPDF} disabled={pdfExporting} className="btn-cta" style={{ width: 'auto', padding: '0.45rem 1.1rem', fontSize: '0.85rem' }}>
+                  {pdfExporting ? '导出中...' : '📄 导出 PDF'}
                 </button>
               </div>
             )}
           </div>
 
-          {/* 渲染区域 (修改规则 1: 加载中央直接写“正在生成反馈”) */}
-          <div style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
             {loading && (
-              <div style={{ position: 'absolute', inset: 0, background: 'rgba(15, 12, 27, 0.92)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-md)', zIndex: 10 }}>
-                <svg className="animate-spin" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="3" style={{ marginBottom: '0.75rem' }}>
-                  <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.49 8.49l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.49-8.49l2.83-2.83"/>
-                </svg>
-                <div style={{ fontWeight: '700', color: 'var(--text-primary)', fontSize: '1.15rem' }}>
-                  正在生成反馈
+              <div style={{ position: 'absolute', inset: 0, background: 'rgba(15, 12, 27, 0.95)', backdropFilter: 'blur(16px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-md)', zIndex: 10 }}>
+                <div className="empty-icon-glow" style={{ marginBottom: '1.2rem' }}>
+                  ⚡
                 </div>
+                <div style={{ fontWeight: '700', color: 'var(--text-primary)', fontSize: '1.2rem', marginBottom: '0.5rem' }}>
+                  正在生成反馈中...
+                </div>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                  AI 正在分析课堂文本并绘制 2K 风格脑图海报
+                </p>
               </div>
             )}
 
             {error && (
               <div style={{ padding: '1rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: 'var(--radius-md)', color: 'var(--danger)', fontSize: '0.9rem', marginBottom: '1rem' }}>
-                <strong>提示/报错：</strong> {error}
+                <strong>提示：</strong> {error}
               </div>
             )}
 
             {generatedFeedback ? (
-              <div style={{ flex: 1, background: 'rgba(0, 0, 0, 0.25)', border: '1px solid var(--panel-border)', borderRadius: 'var(--radius-md)', padding: '1.25rem', overflowY: 'auto', textAlign: 'left' }}>
+              <div className="result-content-container" style={{ flex: 1, overflowY: 'auto' }}>
                 {renderTextWithImageInBetween()}
               </div>
             ) : (
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', border: '1px dashed var(--panel-border)', borderRadius: 'var(--radius-md)' }}>
-                等待生成反馈。可在左侧选择音频或填入逐字稿，点击“生成图文课后反馈”。
+              <div className="empty-state-box">
+                <div className="empty-icon-glow">
+                  ✨
+                </div>
+                <div>
+                  <h4 style={{ fontSize: '1.1rem', marginBottom: '0.3rem' }}>尚未生成反馈报告</h4>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem' }}>
+                    通过左侧面板填入学员信息，唤起录音或贴入逐字稿，点击“生成图文课后反馈”。
+                  </p>
+                </div>
+
+                <div className="steps-guide">
+                  <div className="step-card">
+                    <div className="step-number">1</div>
+                    <div className="step-title">填学员 & 风格</div>
+                    <div className="step-desc">选学生姓名与主题样式</div>
+                  </div>
+                  <div className="step-card">
+                    <div className="step-number">2</div>
+                    <div className="step-title">导入/转写录音</div>
+                    <div className="step-desc">录音一键提取逐字稿</div>
+                  </div>
+                  <div className="step-card">
+                    <div className="step-number">3</div>
+                    <div className="step-title">生成图文 PDF</div>
+                    <div className="step-desc">双引擎一键输出海报报告</div>
+                  </div>
+                </div>
               </div>
             )}
           </div>
         </section>
       </main>
 
-      {/* 底部 Footer (修改规则 2: 下面部分直接写“尘埃落定·始见星辰”) */}
+      {/* 底部 Footer */}
       <footer style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', padding: '0.5rem 0', marginTop: 'auto', letterSpacing: '2px', fontWeight: '500' }}>
-        尘埃落定 · 始见星辰
+        尘埃落定 · 始见星辰 | 反馈助手 v2.0 Pro Edition
       </footer>
     </div>
   );

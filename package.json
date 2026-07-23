@@ -1,6 +1,6 @@
 {
   "name": "feedback-assistant",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "macOS Desktop App for post-class learning feedback",
   "main": "main.js",
   "type": "module",
