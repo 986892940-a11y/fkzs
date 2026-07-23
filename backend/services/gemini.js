@@ -158,7 +158,9 @@ export async function generateFeedbackFromAudio(audioPath, mimeType, studentName
   try {
     fileUpload = await ai.files.upload({
       file: audioPath,
-      mimeType: safeMimeType
+      config: {
+        mimeType: safeMimeType
+      }
     });
   } catch (uploadErr) {
     if (uploadErr.message.includes('leaked') || uploadErr.message.includes('PERMISSION_DENIED') || uploadErr.message.includes('API key not valid')) {
