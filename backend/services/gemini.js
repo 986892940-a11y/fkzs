@@ -148,13 +148,17 @@ export async function generateFeedbackFromAudio(audioPath, mimeType, studentName
   
   const primaryModel = process.env.FEEDBACK_MODEL || 'gemini-3.5-flash';
 
-  console.log(`[Gemini] 开始上传音频文件: ${audioPath}, MimeType: ${mimeType}`);
+  const safeMimeType = (mimeType && mimeType.includes('/')) 
+    ? mimeType 
+    : (audioPath.match(/\.mp3$/i) ? 'audio/mp3' : 'audio/m4a');
+
+  console.log(`[Gemini] 开始上传音频文件: ${audioPath}, MimeType: ${safeMimeType}`);
   
   let fileUpload;
   try {
     fileUpload = await ai.files.upload({
       file: audioPath,
-      mimeType: mimeType || 'audio/m4a'
+      mimeType: safeMimeType
     });
   } catch (uploadErr) {
     if (uploadErr.message.includes('leaked') || uploadErr.message.includes('PERMISSION_DENIED') || uploadErr.message.includes('API key not valid')) {
@@ -163,7 +167,8 @@ export async function generateFeedbackFromAudio(audioPath, mimeType, studentName
     throw uploadErr;
   }
 
-  console.log(`[Gemini] 音频上传成功，文件 URI: ${fileUpload.uri}`);
+  const finalMimeType = fileUpload.mimeType || safeMimeType || 'audio/m4a';
+  console.log(`[Gemini] 音频上传成功，文件 URI: ${fileUpload.uri}, 确定 MimeType: ${finalMimeType}`);
 
   try {
     let tonePromptInstruction = '';
@@ -187,13 +192,20 @@ export async function generateFeedbackFromAudio(audioPath, mimeType, studentName
     const candidateModels = [primaryModel, 'gemini-3-flash-preview', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
     let responseText = null;
 
+    const audioContentPart = {
+      fileData: {
+        fileUri: fileUpload.uri,
+        mimeType: finalMimeType
+      }
+    };
+
     for (const modelName of candidateModels) {
       try {
         console.log(`[Gemini] 正在调用模型 ${modelName} 分析音频...`);
         const response = await ai.models.generateContent({
           model: modelName,
           contents: [
-            fileUpload,
+            audioContentPart,
             { text: promptText }
           ],
           config: {
