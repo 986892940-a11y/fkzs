@@ -403,21 +403,20 @@
   color: var(--danger);
 }
 
-/* 全屏拖拽 Drag & Drop Overlay */
-.drag-drop-overlay {
-  position: fixed;
+/* 局域拖拽 Drag & Drop Overlay (精确定位在课堂音频通道区域卡片内) */
+.audio-drop-overlay {
+  position: absolute;
   inset: 0;
-  z-index: 9999;
-  background: rgba(79, 70, 229, 0.85);
-  backdrop-filter: blur(12px);
+  z-index: 50;
+  background: rgba(79, 70, 229, 0.92);
+  backdrop-filter: blur(8px);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   color: #ffffff;
-  border: 4px dashed #ffffff;
-  margin: 1.5rem;
-  border-radius: var(--radius-lg);
-  animation: pulseGlow 2s infinite ease-in-out;
+  border: 2.5px dashed #ffffff;
+  border-radius: var(--radius-md);
+  animation: pulseGlow 1.8s infinite ease-in-out;
   pointer-events: none;
 }

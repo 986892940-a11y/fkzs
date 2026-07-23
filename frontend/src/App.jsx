@@ -571,17 +571,6 @@ export default function App() {
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      {/* 拖拽音频全屏高亮覆盖层 */}
-      {isDraggingFile && (
-        <div className="drag-drop-overlay">
-          <div style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>📁</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: '700' }}>释放鼠标直接导入音频文件</div>
-          <p style={{ fontSize: '0.9rem', opacity: 0.9, marginTop: '0.4rem' }}>
-            支持拖入 .m4a, .mp3, .wav 课堂录音文件并一键转文字
-          </p>
-        </div>
-      )}
-
       {/* 顶部 Header */}
       <header className="header-bar">
         <div className="brand-title">
@@ -957,7 +946,18 @@ export default function App() {
               )}
             </div>
 
-            <div className="audio-hub-box" style={{ marginTop: '0.5rem' }}>
+            <div className="audio-hub-box" style={{ marginTop: '0.5rem', position: 'relative' }}>
+              {/* 局域拖拽高亮覆盖层 (精确定位限制在课堂音频通道卡片内) */}
+              {isDraggingFile && (
+                <div className="audio-drop-overlay">
+                  <div style={{ fontSize: '1.6rem', marginBottom: '0.2rem' }}>📥</div>
+                  <div style={{ fontSize: '0.9rem', fontWeight: '700' }}>松开鼠标，直接导入音频</div>
+                  <div style={{ fontSize: '0.75rem', opacity: 0.85, marginTop: '0.2rem' }}>
+                    支持拖入 .m4a / .mp3 / .wav 录音文件
+                  </div>
+                </div>
+              )}
+
               <div className="audio-actions-row" style={{ gridTemplateColumns: '1fr 1.1fr 1fr' }}>
                 <button onClick={handleLaunchVoiceMemos} className="audio-btn" title="调起 macOS 原生语音备忘录">
                   🎙️ 唤起备忘录
