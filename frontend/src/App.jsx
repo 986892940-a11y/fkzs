@@ -17,8 +17,15 @@ export default function App() {
   const [studentGrade, setStudentGrade] = useState('高一');
   const [customThemePrompt, setCustomThemePrompt] = useState('宋代山水画意境');
   const [transcriptText, setTranscriptText] = useState('');
-  
-  // 常用主题列表 (支持用户点击 + 自定义添加)
+
+  // 1. 设置偏好：外观主题、评语语气、PDF署名、API Key
+  const [themeMode, setThemeMode] = useState(() => localStorage.getItem('app_theme') || 'light');
+  const [feedbackTone, setFeedbackTone] = useState(() => localStorage.getItem('feedback_tone') || '严谨鼓励');
+  const [pdfBrandTitle, setPdfBrandTitle] = useState(() => localStorage.getItem('pdf_brand_title') || '');
+  const [customApiKey, setCustomApiKey] = useState(() => localStorage.getItem('gemini_api_key') || '');
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+
+  // 常用主题列表
   const [quickThemes, setQuickThemes] = useState(() => {
     try {
       const saved = localStorage.getItem('custom_quick_themes');
@@ -44,6 +51,12 @@ export default function App() {
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
 
+  // 应用主题模式
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', themeMode);
+    localStorage.setItem('app_theme', themeMode);
+  }, [themeMode]);
+
   useEffect(() => {
     fetchVoiceMemos();
   }, []);
@@ -58,6 +71,19 @@ export default function App() {
     } catch (err) {
       console.warn('[App] 刷新备忘录列表提示:', err.message);
     }
+  };
+
+  const handleSaveSettings = (e) => {
+    if (e) e.preventDefault();
+    localStorage.setItem('app_theme', themeMode);
+    localStorage.setItem('feedback_tone', feedbackTone);
+    localStorage.setItem('pdf_brand_title', pdfBrandTitle.trim());
+    if (customApiKey.trim()) {
+      localStorage.setItem('gemini_api_key', customApiKey.trim());
+    } else {
+      localStorage.removeItem('gemini_api_key');
+    }
+    setShowSettingsModal(false);
   };
 
   // 添加用户常用主题快捷标签
@@ -103,6 +129,7 @@ export default function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          apiKey: customApiKey.trim() || undefined,
           studentName: studentName.trim(),
           memoPath: selectedMemo ? selectedMemo.path : null
         })
@@ -134,6 +161,9 @@ export default function App() {
     setRecordingStatusNotice(`正在上传“${file.name}”并转写为文字...`);
 
     const formData = new FormData();
+    if (customApiKey.trim()) {
+      formData.append('apiKey', customApiKey.trim());
+    }
     formData.append('studentName', studentName.trim());
     formData.append('audioFile', file);
 
@@ -171,8 +201,12 @@ export default function App() {
 
     const formData = new FormData();
     formData.append('type', 'text');
+    if (customApiKey.trim()) {
+      formData.append('apiKey', customApiKey.trim());
+    }
     formData.append('studentName', studentName.trim());
     formData.append('studentGrade', studentGrade);
+    formData.append('feedbackTone', feedbackTone);
     formData.append('imageStyle', customThemePrompt.trim() || '宋代山水画意境');
     formData.append('transcript', transcriptText.trim());
 
@@ -218,10 +252,11 @@ export default function App() {
     const filename = `课后学习反馈纯文本_${studentName.trim() || '学员'}_${studentGrade}_${dateStr}.txt`;
 
     let fullTextContent = `========================================================\n`;
-    fullTextContent += `        课后学习反馈档案 (v2.0 纯文本档案版)\n`;
+    fullTextContent += `        ${pdfBrandTitle.trim() || '课后学习反馈档案 (v2.0 纯文本档案版)'}\n`;
     fullTextContent += `========================================================\n`;
     fullTextContent += `【学员姓名】：${studentName.trim() || '未指定'}\n`;
     fullTextContent += `【学员学段】：${studentGrade}\n`;
+    fullTextContent += `【反馈语气】：${feedbackTone}\n`;
     fullTextContent += `【生成时间】：${dateStr}\n`;
     fullTextContent += `========================================================\n\n`;
 
@@ -265,6 +300,7 @@ export default function App() {
         body: JSON.stringify({
           studentName: studentName.trim(),
           studentGrade: studentGrade,
+          pdfBrandTitle: pdfBrandTitle.trim() || undefined,
           feedbackText: generatedFeedback,
           imageBase64: knowledgeImageBase64,
           imagesBase64: knowledgeImagesBase64
@@ -318,7 +354,7 @@ export default function App() {
       const suffix = cleanText.slice(colonIndex + 1);
       return (
         <span>
-          <strong style={{ color: 'var(--accent-cyan)', fontWeight: '700' }}>{prefix}</strong>
+          <strong style={{ color: 'var(--primary)', fontWeight: '700' }}>{prefix}</strong>
           {suffix}
         </span>
       );
@@ -346,7 +382,7 @@ export default function App() {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.4rem' }}>
         {recordLines.length > 0 && (
-          <div style={{ whiteSpace: 'pre-wrap', background: 'rgba(255,255,255,0.02)', padding: '1.2rem', borderRadius: 'var(--radius-md)', borderLeft: '4px solid var(--accent-cyan)' }}>
+          <div style={{ whiteSpace: 'pre-wrap', background: 'rgba(79, 70, 229, 0.04)', padding: '1.2rem', borderRadius: 'var(--radius-md)', borderLeft: '4px solid var(--primary)' }}>
             {recordLines.map((l, idx) => <div key={idx}>{renderFormattedMarkdownLine(l)}</div>)}
           </div>
         )}
@@ -355,7 +391,7 @@ export default function App() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
             {knowledgeImagesBase64.map((imgBase64, imgIdx) => (
               <div key={imgIdx} className="knowledge-image-card" style={{ padding: '1rem', textAlign: 'center' }}>
-                <div style={{ fontSize: '0.88rem', color: 'var(--accent-cyan)', fontWeight: '600', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                <div style={{ fontSize: '0.88rem', color: 'var(--primary)', fontWeight: '600', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
                   2K AI 知识高精海报 {knowledgeImagesBase64.length > 1 ? `(模块 ${imgIdx + 1})` : ''} · 主题: {customThemePrompt || '宋代山水画意境'}
                 </div>
@@ -387,18 +423,128 @@ export default function App() {
       {/* 顶部 Header */}
       <header className="header-bar">
         <div className="brand-title">
-          <div className="brand-logo-badge">⚡</div>
+          <div className="brand-logo-badge">🌿</div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
               <h1 style={{ margin: 0, fontSize: '1.6rem' }}>反馈助手</h1>
               <span className="version-pill">v2.0 Pro</span>
             </div>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.84rem', marginTop: '0.1rem' }}>
-              智绘课后 · 更懂教学，更懂学生
+              智绘课后 · 素雅高质感教学反馈
             </p>
           </div>
         </div>
+
+        {/* 顶部设置按钮 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <button
+            onClick={() => setShowSettingsModal(true)}
+            className="btn-secondary"
+            style={{ fontWeight: '600' }}
+          >
+            ⚙️ 设置偏好
+          </button>
+        </div>
       </header>
+
+      {/* 核心设置弹窗 (Settings Modal) */}
+      {showSettingsModal && (
+        <div className="modal-overlay" onClick={() => setShowSettingsModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                ⚙️ 应用设置中心
+              </h3>
+              <button onClick={() => setShowSettingsModal(false)} style={{ background: 'transparent', fontSize: '1.2rem', color: 'var(--text-muted)' }}>
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveSettings} className="settings-group">
+              {/* 1. 界面外观与配色偏好 */}
+              <div className="settings-item">
+                <div>
+                  <div className="settings-label">🎨 界面外观与配色方案</div>
+                  <div className="settings-desc">选择符合您使用习惯的视觉界面模式</div>
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setThemeMode('light')}
+                    className={`theme-toggle-btn ${themeMode === 'light' ? 'active' : ''}`}
+                  >
+                    🍃 素雅暖光
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setThemeMode('dark')}
+                    className={`theme-toggle-btn ${themeMode === 'dark' ? 'active' : ''}`}
+                  >
+                    🌙 深邃夜间
+                  </button>
+                </div>
+              </div>
+
+              {/* 2. 反馈评语语气偏好 */}
+              <div className="settings-item" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.6rem' }}>
+                <div>
+                  <div className="settings-label">📝 反馈评语语气风格</div>
+                  <div className="settings-desc">生成课后反馈报告时 AI 的写作语气</div>
+                </div>
+                <select
+                  value={feedbackTone}
+                  onChange={(e) => setFeedbackTone(e.target.value)}
+                  className="form-select"
+                  style={{ width: '100%' }}
+                >
+                  <option value="严谨鼓励">严谨鼓励（专业严谨，富有正向关怀）</option>
+                  <option value="温和亲切">温和亲切（平易近人，便于家长沟通）</option>
+                  <option value="考纲提分">考纲提分（聚焦中高考考点与解题技巧）</option>
+                </select>
+              </div>
+
+              {/* 3. PDF 导出抬头发行署名 */}
+              <div className="settings-item" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.6rem' }}>
+                <div>
+                  <div className="settings-label">📄 PDF 导出机构/教师署名</div>
+                  <div className="settings-desc">导出的 PDF 报告顶部显示的个人或工作室名称</div>
+                </div>
+                <input
+                  type="text"
+                  placeholder="如：彭老师语文名师工作室"
+                  value={pdfBrandTitle}
+                  onChange={(e) => setPdfBrandTitle(e.target.value)}
+                  className="form-input"
+                />
+              </div>
+
+              {/* 4. 自定义 Gemini API Key (备用覆盖) */}
+              <div className="settings-item" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.6rem', borderBottom: 'none' }}>
+                <div>
+                  <div className="settings-label">🔑 Gemini API Key（可选覆盖）</div>
+                  <div className="settings-desc">默认自动使用系统后台 .env 配置。如需临时使用自己的 Key 可在此填入</div>
+                </div>
+                <input
+                  type="password"
+                  placeholder="默认使用后台环境配置 (留空即可)"
+                  value={customApiKey}
+                  onChange={(e) => setCustomApiKey(e.target.value)}
+                  className="form-input"
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.6rem', marginTop: '0.5rem' }}>
+                <button type="button" onClick={() => setShowSettingsModal(false)} className="btn-secondary">
+                  取消
+                </button>
+                <button type="submit" className="btn-cta" style={{ width: 'auto', padding: '0.6rem 1.4rem', fontSize: '0.9rem' }}>
+                  保存设置
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* 核心工作区 */}
       <main className="grid-cols-2">
@@ -475,7 +621,7 @@ export default function App() {
                 type="button"
                 onClick={handleAddCustomQuickTheme}
                 className="theme-chip"
-                style={{ borderColor: 'rgba(16, 185, 129, 0.4)', color: '#34d399' }}
+                style={{ borderColor: 'rgba(16, 185, 129, 0.4)', color: 'var(--success)' }}
               >
                 + 自定义常用主题
               </button>
@@ -526,7 +672,7 @@ export default function App() {
                       className={`list-item-card ${selectedMemo?.id === memo.id ? 'selected' : ''}`}
                       style={{ padding: '0.5rem 0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                     >
-                      <div style={{ fontSize: '0.85rem', fontWeight: '500', color: selectedMemo?.id === memo.id ? 'var(--accent-cyan)' : 'var(--text-primary)' }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: '500', color: selectedMemo?.id === memo.id ? 'var(--primary)' : 'var(--text-primary)' }}>
                         🎵 {memo.name}
                       </div>
                       <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
@@ -545,7 +691,7 @@ export default function App() {
                 onClick={handleTranscribeSelectedMemo}
                 disabled={isTranscribing}
                 className="btn-secondary"
-                style={{ width: '100%', justifyContent: 'center', padding: '0.65rem', background: 'rgba(6, 182, 212, 0.1)', borderColor: 'rgba(6, 182, 212, 0.3)', color: '#38bdf8' }}
+                style={{ width: '100%', justifyContent: 'center', padding: '0.65rem', color: 'var(--primary)' }}
               >
                 {isTranscribing ? '正在提取转写中...' : selectedMemo ? `⚡ 一键转写【${selectedMemo.name}】` : '⚡ 抓取或转写选中音频'}
               </button>
@@ -616,7 +762,7 @@ export default function App() {
 
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
             {loading && (
-              <div style={{ position: 'absolute', inset: 0, background: 'rgba(15, 12, 27, 0.95)', backdropFilter: 'blur(16px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-md)', zIndex: 10 }}>
+              <div style={{ position: 'absolute', inset: 0, background: 'var(--panel-bg)', backdropFilter: 'blur(16px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-md)', zIndex: 10 }}>
                 <div className="empty-icon-glow" style={{ marginBottom: '1.2rem' }}>
                   ⚡
                 </div>
@@ -630,7 +776,7 @@ export default function App() {
             )}
 
             {error && (
-              <div style={{ padding: '1rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: 'var(--radius-md)', color: 'var(--danger)', fontSize: '0.9rem', marginBottom: '1rem' }}>
+              <div style={{ padding: '1rem', background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: 'var(--radius-md)', color: 'var(--danger)', fontSize: '0.9rem', marginBottom: '1rem' }}>
                 <strong>提示：</strong> {error}
               </div>
             )}
@@ -642,7 +788,7 @@ export default function App() {
             ) : (
               <div className="empty-state-box">
                 <div className="empty-icon-glow">
-                  ✨
+                  🍃
                 </div>
                 <div>
                   <h4 style={{ fontSize: '1.1rem', marginBottom: '0.3rem' }}>尚未生成反馈报告</h4>
