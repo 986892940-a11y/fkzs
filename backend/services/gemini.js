@@ -243,6 +243,86 @@ export async function generateFeedbackFromAudio(audioPath, mimeType, studentName
 }
 
 /**
+ * 仅将录音音频转化为口语逐字稿纯文本 (不进行 AI 反馈总结排版)
+ */
+export async function transcribeAudioToText(audioPath, mimeType, customApiKey) {
+  const ai = getGeminiClient(customApiKey);
+  const primaryModel = process.env.FEEDBACK_MODEL || 'gemini-3.5-flash';
+
+  const safeMimeType = (mimeType && mimeType.includes('/')) 
+    ? mimeType 
+    : (audioPath.match(/\.mp3$/i) ? 'audio/mp3' : 'audio/m4a');
+
+  console.log(`[Gemini] 开始上传音频进行【纯逐字稿转写】: ${audioPath}, MimeType: ${safeMimeType}`);
+  
+  let fileUpload;
+  try {
+    fileUpload = await ai.files.upload({
+      file: audioPath,
+      config: {
+        mimeType: safeMimeType
+      }
+    });
+  } catch (uploadErr) {
+    if (uploadErr.message.includes('leaked') || uploadErr.message.includes('PERMISSION_DENIED') || uploadErr.message.includes('API key not valid')) {
+      throw new Error('当前 Gemini API Key 已失效或被 Google 注销。请在设置中配置有效 API Key。');
+    }
+    throw uploadErr;
+  }
+
+  const finalMimeType = fileUpload.mimeType || safeMimeType || 'audio/m4a';
+
+  try {
+    const promptText = `你是一个极其精准高效的课堂录音语音识别速记员。请完整聆听此段音频内容，将其精确转写为纯文本格式的口语对话逐字稿。\n\n【核心转写要求】：\n1. 请原汁原味地输出音频中的说话内容（包含师生问答、讲解细节、举例等内容），不要遗漏音频中的重要交流。\n2. 绝对严禁生成任何“课堂回顾”、“授课内容”、“考点拆解”或家长课后反馈报告格式！\n3. 绝对严禁进行总结归纳或添加 Markdown 报告结构，只输出纯文本的对话/讲课逐字稿本身即可。`;
+
+    const candidateModels = [primaryModel, 'gemini-3-flash-preview', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
+    let responseText = null;
+
+    const audioContentPart = {
+      fileData: {
+        fileUri: fileUpload.uri,
+        mimeType: finalMimeType
+      }
+    };
+
+    for (const modelName of candidateModels) {
+      try {
+        console.log(`[Gemini] 正在调用模型 ${modelName} 提取纯逐字稿...`);
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents: [
+            audioContentPart,
+            { text: promptText }
+          ],
+          config: {
+            temperature: 0.2,
+          }
+        });
+
+        if (response && response.text) {
+          responseText = response.text;
+          break;
+        }
+      } catch (err) {
+        console.warn(`[Gemini] 模型 ${modelName} 逐字稿提取尝试失败: ${err.message}`);
+      }
+    }
+
+    if (!responseText) {
+      throw new Error('音频转写失败：未能从录音中提取出文字内容。');
+    }
+
+    return responseText.trim();
+  } finally {
+    try {
+      if (fileUpload && fileUpload.name) {
+        await ai.files.delete({ name: fileUpload.name });
+      }
+    } catch (e) {}
+  }
+}
+
+/**
  * 辅助清洗 Markdown 标记
  */
 function cleanMarkdown(text) {

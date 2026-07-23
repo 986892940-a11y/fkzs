@@ -6,7 +6,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { getVoiceMemosList, launchVoiceMemosApp, openVoiceMemosFolder, getLatestRecordingFile } from './services/voiceMemos.js';
-import { generateFeedbackFromText, generateFeedbackFromAudio } from './services/gemini.js';
+import { generateFeedbackFromText, generateFeedbackFromAudio, transcribeAudioToText } from './services/gemini.js';
 import { composeKnowledgeCardImage } from './services/imageCardComposer.js';
 import { generateFeedbackPDF } from './services/pdfGenerator.js';
 
@@ -77,20 +77,20 @@ app.post('/api/open-voice-memos-dir', async (req, res) => {
   }
 });
 
-// 上传任意音频进行 AI 转文字
+// 上传任意音频进行 AI 纯文本逐字稿转写
 app.post('/api/transcribe-uploaded-audio', upload.single('audioFile'), async (req, res) => {
-  const { apiKey, studentName } = req.body;
+  const { apiKey } = req.body;
   if (!req.file) {
     return res.status(400).json({ success: false, message: '请上传音频文件' });
   }
 
   try {
-    console.log(`[Server] 处理上传音频转文字: ${req.file.path}`);
-    const transcript = await generateFeedbackFromAudio(req.file.path, req.file.mimetype || 'audio/m4a', studentName, apiKey);
+    console.log(`[Server] 处理上传音频提取纯逐字稿: ${req.file.path}`);
+    const transcript = await transcribeAudioToText(req.file.path, req.file.mimetype || 'audio/m4a', apiKey);
     res.json({ success: true, transcript, filename: req.file.originalname });
   } catch (err) {
-    console.error('[Server] 音频转文字失败:', err);
-    res.status(500).json({ success: false, message: err.message || '音频转文字失败' });
+    console.error('[Server] 音频纯逐字稿转写失败:', err);
+    res.status(500).json({ success: false, message: err.message || '音频逐字稿转写失败' });
   } finally {
     if (req.file && fs.existsSync(req.file.path)) {
       try { fs.unlinkSync(req.file.path); } catch (e) {}
@@ -98,9 +98,9 @@ app.post('/api/transcribe-uploaded-audio', upload.single('audioFile'), async (re
   }
 });
 
-// 抓取指定或最新音频文件，自动转化为文本逐字稿
+// 抓取指定或最新音频文件，自动转化为纯文本逐字稿
 app.post('/api/transcribe-memo', async (req, res) => {
-  const { apiKey, studentName, memoPath } = req.body;
+  const { apiKey, memoPath } = req.body;
   try {
     let targetPath = memoPath;
     let filename = '选中的音频';
@@ -120,18 +120,18 @@ app.post('/api/transcribe-memo', async (req, res) => {
       return res.status(404).json({ success: false, message: `音频文件不存在或路径受限制: ${targetPath}` });
     }
 
-    console.log(`[Server] 开始转写音频文件 [${filename}]:`, targetPath);
+    console.log(`[Server] 开始提取纯逐字稿 [${filename}]:`, targetPath);
     const mimeType = targetPath.endsWith('.mp3') ? 'audio/mp3' : 'audio/m4a';
-    const feedbackText = await generateFeedbackFromAudio(targetPath, mimeType, studentName, apiKey);
+    const transcriptText = await transcribeAudioToText(targetPath, mimeType, apiKey);
 
     res.json({
       success: true,
       filename,
-      transcript: feedbackText
+      transcript: transcriptText
     });
   } catch (err) {
-    console.error('[Server] 转写音频文本异常:', err);
-    res.status(500).json({ success: false, message: err.message || '转写音频失败' });
+    console.error('[Server] 提取纯逐字稿异常:', err);
+    res.status(500).json({ success: false, message: err.message || '音频纯逐字稿提取失败' });
   }
 });
 
