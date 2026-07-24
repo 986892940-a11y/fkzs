@@ -32,6 +32,12 @@ export default function App() {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [isEditingFeedback, setIsEditingFeedback] = useState(false);
 
+  // 查找与批量替换错别字状态
+  const [findText, setFindText] = useState('');
+  const [replaceText, setReplaceText] = useState('');
+  const [replaceNotice, setReplaceNotice] = useState('');
+  const [isPosterRegenerating, setIsPosterRegenerating] = useState(false);
+
   // 常用主题词库 (支持点选、添加、删除、排序)
   const [quickThemes, setQuickThemes] = useState(() => {
     try {
@@ -382,6 +388,67 @@ export default function App() {
     }
   };
 
+  // 批量替换文本错别字
+  const handleReplaceAll = () => {
+    if (!findText) return;
+    try {
+      const escaped = findText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(escaped, 'g');
+      const matches = generatedFeedback.match(regex);
+      const count = matches ? matches.length : 0;
+
+      if (count === 0) {
+        setReplaceNotice(`未在文本中找到 "${findText}"`);
+        setTimeout(() => setReplaceNotice(''), 2500);
+        return;
+      }
+
+      const updated = generatedFeedback.replaceAll(findText, replaceText);
+      setGeneratedFeedback(updated);
+      setReplaceNotice(`🎉 成功为您批量替换 ${count} 处 "${findText}" ➔ "${replaceText}"`);
+      setTimeout(() => setReplaceNotice(''), 3500);
+    } catch (err) {
+      setReplaceNotice('替换过程发生异常，请检查输入字符');
+      setTimeout(() => setReplaceNotice(''), 2500);
+    }
+  };
+
+  // 根据修正后的最新文本重新生成 2K 海报
+  const handleRegeneratePoster = async () => {
+    if (!generatedFeedback) return;
+    setIsPosterRegenerating(true);
+    setReplaceNotice('正在根据您修正后的最新文本重新绘制 2K 知识海报...');
+
+    try {
+      const response = await fetch(`${API_BASE}/regenerate-poster`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          feedbackText: generatedFeedback,
+          imageStyle: customThemePrompt.trim() || '宋代山水画意境',
+          posterMode: posterMode,
+          apiKey: customApiKey.trim()
+        })
+      });
+
+      const data = await response.json();
+      if (data.success && data.imagesBase64 && data.imagesBase64.length > 0) {
+        setKnowledgeImagesBase64(data.imagesBase64);
+        setKnowledgeImageBase64(data.imagesBase64[0]);
+        setReplaceNotice('✨ 海报已成功更新为您修正后的最新文字！');
+        setTimeout(() => setReplaceNotice(''), 3500);
+      } else {
+        setReplaceNotice(`海报重新绘制失败: ${data.message || '未知错误'}`);
+        setTimeout(() => setReplaceNotice(''), 3500);
+      }
+    } catch (err) {
+      setReplaceNotice('海报重新绘制网络请求失败，请检查服务。');
+      setTimeout(() => setReplaceNotice(''), 3000);
+    } finally {
+      setIsPosterRegenerating(false);
+    }
+  };
+
   const handleCopy = () => {
     if (!generatedFeedback) return;
     const cleanText = generatedFeedback.replace(/\*\*/g, '').replace(/^#+\s*/gm, '');
@@ -547,6 +614,19 @@ export default function App() {
                   alt={`知识海报 ${imgIdx + 1}`}
                   style={{ width: '100%', borderRadius: 'var(--radius-sm)', objectFit: 'contain' }}
                 />
+                
+                {/* 重新绘制海报与纠错控制栏 */}
+                <div style={{ marginTop: '0.75rem', display: 'flex', justifyContent: 'center', gap: '0.6rem' }}>
+                  <button
+                    onClick={handleRegeneratePoster}
+                    disabled={isPosterRegenerating}
+                    className="btn-secondary"
+                    style={{ fontSize: '0.8rem', padding: '0.35rem 0.85rem', color: 'var(--primary)', borderColor: 'var(--primary)' }}
+                    title="在修正文字错别字后，点击此按钮带着最新文字重新渲染海报"
+                  >
+                    {isPosterRegenerating ? '⚡ 海报重绘中...' : '🔄 纠错后重新绘制海报'}
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -1081,15 +1161,49 @@ export default function App() {
             {generatedFeedback ? (
               <div className="result-content-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
                 {isEditingFeedback ? (
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem', height: '100%' }}>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--primary)', fontWeight: '600', padding: '0.2rem 0' }}>
-                      ✏️ 正在编辑修改反馈文本（随时修正错别字/评语，修改后复制或导出 PDF 将自动包含最新内容）：
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.6rem', height: '100%' }}>
+                    {/* 查找与批量替换错别字工具条 */}
+                    <div style={{ background: 'rgba(79, 70, 229, 0.04)', padding: '0.6rem 0.75rem', borderRadius: 'var(--radius-sm)', border: '1px stroke var(--panel-border)', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--primary)', whiteSpace: 'nowrap' }}>🔍 批量替换错别字:</span>
+                        <input
+                          type="text"
+                          placeholder="查找的错别字 (如: 李阳)"
+                          value={findText}
+                          onChange={(e) => setFindText(e.target.value)}
+                          className="form-input"
+                          style={{ width: '160px', padding: '0.25rem 0.5rem', fontSize: '0.8rem' }}
+                        />
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>➔</span>
+                        <input
+                          type="text"
+                          placeholder="替换为正确字 (如: 李向阳)"
+                          value={replaceText}
+                          onChange={(e) => setReplaceText(e.target.value)}
+                          className="form-input"
+                          style={{ width: '160px', padding: '0.25rem 0.5rem', fontSize: '0.8rem' }}
+                        />
+                        <button
+                          onClick={handleReplaceAll}
+                          className="btn-secondary"
+                          style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem', color: 'var(--primary)', borderColor: 'var(--primary)' }}
+                        >
+                          ⚡ 全部替换
+                        </button>
+                      </div>
+
+                      {replaceNotice && (
+                        <div style={{ fontSize: '0.78rem', color: 'var(--primary)', fontWeight: '600' }}>
+                          {replaceNotice}
+                        </div>
+                      )}
                     </div>
+
                     <textarea
                       value={generatedFeedback}
                       onChange={(e) => setGeneratedFeedback(e.target.value)}
                       className="form-input"
-                      style={{ flex: 1, minHeight: '400px', resize: 'none', lineHeight: '1.85', fontSize: '0.92rem', padding: '1rem' }}
+                      style={{ flex: 1, minHeight: '380px', resize: 'none', lineHeight: '1.85', fontSize: '0.92rem', padding: '1rem' }}
                     />
                   </div>
                 ) : (

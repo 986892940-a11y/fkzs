@@ -202,12 +202,51 @@ app.post('/api/generate-feedback', upload.single('audioFile'), async (req, res) 
     });
 
   } catch (err) {
-    console.error('[Server] 生成反馈失败:', err);
-    res.status(500).json({ success: false, message: err.message || '生成反馈失败' });
+    console.error('[Server] 生成反馈失败异常:', err);
+    res.status(500).json({ success: false, message: err.message || '生成课后反馈失败' });
   } finally {
     if (tempFilePath && fs.existsSync(tempFilePath)) {
       try { fs.unlinkSync(tempFilePath); } catch (e) {}
     }
+  }
+});
+
+// 根据修改后的最新文本重新生成知识海报
+app.post('/api/regenerate-poster', async (req, res) => {
+  const { feedbackText, imageStyle, posterMode, apiKey } = req.body;
+  try {
+    if (!feedbackText || !feedbackText.trim()) {
+      return res.status(400).json({ success: false, message: '反馈文本不能为空' });
+    }
+
+    console.log(`[Server] 🔄 正在根据修正后的最新文本重新生成 2K 知识海报... (主题: ${imageStyle || '宋代山水画意境'})`);
+    const imgRes = await composeKnowledgeCardImage({
+      transcript: feedbackText,
+      feedbackText: feedbackText,
+      styleType: imageStyle || '宋代山水画意境',
+      customApiKey: apiKey,
+      posterMode: posterMode || 'single'
+    });
+
+    let imageBase64 = null;
+    let imagesBase64 = [];
+
+    if (imgRes && typeof imgRes === 'object') {
+      imageBase64 = imgRes.primaryImage || null;
+      imagesBase64 = Array.isArray(imgRes.allImages) ? imgRes.allImages : (imageBase64 ? [imageBase64] : []);
+    } else if (typeof imgRes === 'string') {
+      imageBase64 = imgRes;
+      imagesBase64 = [imgRes];
+    }
+
+    res.json({
+      success: true,
+      imageBase64,
+      imagesBase64
+    });
+  } catch (err) {
+    console.error('[Server] 重新绘制海报异常:', err);
+    res.status(500).json({ success: false, message: err.message || '重新绘制海报失败' });
   }
 });
 
