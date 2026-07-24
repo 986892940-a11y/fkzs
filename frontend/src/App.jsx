@@ -30,6 +30,7 @@ export default function App() {
   const [autoFetchMemos, setAutoFetchMemos] = useState(() => localStorage.getItem('auto_fetch_memos') !== 'false');
   const [customApiKey, setCustomApiKey] = useState(() => localStorage.getItem('gemini_api_key') || '');
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [isEditingFeedback, setIsEditingFeedback] = useState(false);
 
   // 常用主题词库 (支持点选、添加、删除、排序)
   const [quickThemes, setQuickThemes] = useState(() => {
@@ -1034,7 +1035,15 @@ export default function App() {
             <h3>📊 课后学习反馈报告</h3>
             
             {generatedFeedback && (
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center' }}>
+                <button
+                  onClick={() => setIsEditingFeedback(!isEditingFeedback)}
+                  className="btn-secondary"
+                  style={{ color: 'var(--primary)', borderColor: 'var(--primary)', fontWeight: '600' }}
+                  title="可在线直接修正反馈字句或错别字"
+                >
+                  {isEditingFeedback ? '👁️ 预览报告' : '✏️ 编辑修改'}
+                </button>
                 <button onClick={handleExportFullText} className="btn-secondary">
                   📝 纯文本
                 </button>
@@ -1070,8 +1079,22 @@ export default function App() {
             )}
 
             {generatedFeedback ? (
-              <div className="result-content-container" style={{ flex: 1, overflowY: 'auto' }}>
-                {renderTextWithImageInBetween()}
+              <div className="result-content-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+                {isEditingFeedback ? (
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem', height: '100%' }}>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--primary)', fontWeight: '600', padding: '0.2rem 0' }}>
+                      ✏️ 正在编辑修改反馈文本（随时修正错别字/评语，修改后复制或导出 PDF 将自动包含最新内容）：
+                    </div>
+                    <textarea
+                      value={generatedFeedback}
+                      onChange={(e) => setGeneratedFeedback(e.target.value)}
+                      className="form-input"
+                      style={{ flex: 1, minHeight: '400px', resize: 'none', lineHeight: '1.85', fontSize: '0.92rem', padding: '1rem' }}
+                    />
+                  </div>
+                ) : (
+                  renderTextWithImageInBetween()
+                )}
               </div>
             ) : (
               <div className="empty-state-box">
