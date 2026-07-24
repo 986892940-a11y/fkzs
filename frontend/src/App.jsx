@@ -946,34 +946,15 @@ export default function App() {
               )}
             </div>
 
-            <div className="audio-hub-box" style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {/* 单一强力主功能：打开 Mac 原生录音文件夹 */}
-              <button
-                onClick={handleOpenVoiceMemosDir}
-                className="btn-secondary"
-                style={{
-                  width: '100%',
-                  justify: 'center',
-                  padding: '0.65rem 1rem',
-                  fontSize: '0.88rem',
-                  fontWeight: '600',
-                  color: 'var(--primary)',
-                  borderColor: 'var(--primary)',
-                  background: 'rgba(79, 70, 229, 0.04)'
-                }}
-                title="直接在 macOS 访达中打开保存有所有录音原文件的专属文件夹"
-              >
-                📂 打开录音文件夹
-              </button>
-
-              {/* 中央大尺寸拖拽与点击选取区 */}
+            <div className="audio-hub-box" style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {/* 唯一全屏大尺寸拖拽与点击打开区 */}
               <div
-                onClick={() => fileInputRef.current && fileInputRef.current.click()}
+                onClick={handleOpenVoiceMemosDir}
                 className={`audio-drop-zone ${isDraggingFile ? 'dragging' : ''}`}
                 style={{
                   border: isDraggingFile ? '2px dashed var(--primary)' : '2px dashed var(--panel-border)',
                   borderRadius: 'var(--radius-md)',
-                  padding: '1.4rem 1rem',
+                  padding: '1.6rem 1rem',
                   textAlign: 'center',
                   background: isDraggingFile ? 'rgba(79, 70, 229, 0.08)' : 'rgba(0,0,0,0.015)',
                   cursor: 'pointer',
@@ -982,15 +963,16 @@ export default function App() {
                   flexDirection: 'column',
                   alignItems: 'center',
                   justify: 'center',
-                  gap: '0.35rem'
+                  gap: '0.4rem'
                 }}
+                title="拖拽录音文件放开即可转写，或点击直接打开 macOS 录音专属文件夹"
               >
-                <div style={{ fontSize: '2rem', opacity: 0.85 }}>📥</div>
-                <div style={{ fontSize: '0.92rem', fontWeight: '600', color: 'var(--text-primary)' }}>
+                <div style={{ fontSize: '2.2rem', opacity: 0.85 }}>📥</div>
+                <div style={{ fontSize: '0.95rem', fontWeight: '600', color: 'var(--text-primary)' }}>
                   拖拽文件至此处，进行逐字稿转写提取
                 </div>
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                  或点击此区域选择本地音频 (.m4a / .mp3 / .wav)
+                <div style={{ fontSize: '0.78rem', color: 'var(--primary)', fontWeight: '500' }}>
+                  或点击此区域，自动打开 macOS 录音专属文件夹
                 </div>
 
                 <input
