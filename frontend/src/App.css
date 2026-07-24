@@ -403,6 +403,12 @@
   color: var(--danger);
 }
 
+/* 局域拖拽 Drag & Drop Zone */
+.audio-drop-zone:hover {
+  border-color: var(--primary) !important;
+  background: rgba(79, 70, 229, 0.04) !important;
+}
+
 /* 局域拖拽 Drag & Drop Overlay (精确定位在课堂音频通道区域卡片内) */
 .audio-drop-overlay {
   position: absolute;

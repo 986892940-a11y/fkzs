@@ -929,11 +929,11 @@ export default function App() {
             </div>
           </div>
 
-          {/* 3. 音频转写通道 (支持全屏/区域拖拽放置) */}
+          {/* 3. 音频转写通道 */}
           <div>
             <div className="section-title" style={{ justifyContent: 'space-between' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span className="icon">🎙️</span> 课堂音频通道 (支持拖拽录音文件)
+                <span className="icon">🎙️</span> 课堂音频通道
               </span>
               {isTranscribing && (
                 <div className="waveform-container">
@@ -946,28 +946,53 @@ export default function App() {
               )}
             </div>
 
-            <div className="audio-hub-box" style={{ marginTop: '0.5rem', position: 'relative' }}>
-              {/* 局域拖拽高亮覆盖层 (精确定位限制在课堂音频通道卡片内) */}
-              {isDraggingFile && (
-                <div className="audio-drop-overlay">
-                  <div style={{ fontSize: '1.6rem', marginBottom: '0.2rem' }}>📥</div>
-                  <div style={{ fontSize: '0.9rem', fontWeight: '700' }}>松开鼠标，直接导入音频</div>
-                  <div style={{ fontSize: '0.75rem', opacity: 0.85, marginTop: '0.2rem' }}>
-                    支持拖入 .m4a / .mp3 / .wav 录音文件
-                  </div>
-                </div>
-              )}
+            <div className="audio-hub-box" style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {/* 单一强力主功能：打开 Mac 原生录音文件夹 */}
+              <button
+                onClick={handleOpenVoiceMemosDir}
+                className="btn-secondary"
+                style={{
+                  width: '100%',
+                  justify: 'center',
+                  padding: '0.65rem 1rem',
+                  fontSize: '0.88rem',
+                  fontWeight: '600',
+                  color: 'var(--primary)',
+                  borderColor: 'var(--primary)',
+                  background: 'rgba(79, 70, 229, 0.04)'
+                }}
+                title="直接在 macOS 访达中打开保存有所有录音原文件的专属文件夹"
+              >
+                📂 打开录音文件夹
+              </button>
 
-              <div className="audio-actions-row" style={{ gridTemplateColumns: '1fr 1.1fr 1fr' }}>
-                <button onClick={handleLaunchVoiceMemos} className="audio-btn" title="调起 macOS 原生语音备忘录">
-                  🎙️ 唤起备忘录
-                </button>
-                <button onClick={handleOpenVoiceMemosDir} className="audio-btn" style={{ borderColor: 'var(--primary)', color: 'var(--primary)' }} title="直接在 macOS 访达中打开保存有所有录音原文件的专属文件夹">
-                  📂 打开录音文件夹
-                </button>
-                <button onClick={() => fileInputRef.current && fileInputRef.current.click()} className="audio-btn" title="选择本地硬盘里的任意音频文件">
-                  📁 选择本地音频
-                </button>
+              {/* 中央大尺寸拖拽与点击选取区 */}
+              <div
+                onClick={() => fileInputRef.current && fileInputRef.current.click()}
+                className={`audio-drop-zone ${isDraggingFile ? 'dragging' : ''}`}
+                style={{
+                  border: isDraggingFile ? '2px dashed var(--primary)' : '2px dashed var(--panel-border)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '1.4rem 1rem',
+                  textAlign: 'center',
+                  background: isDraggingFile ? 'rgba(79, 70, 229, 0.08)' : 'rgba(0,0,0,0.015)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justify: 'center',
+                  gap: '0.35rem'
+                }}
+              >
+                <div style={{ fontSize: '2rem', opacity: 0.85 }}>📥</div>
+                <div style={{ fontSize: '0.92rem', fontWeight: '600', color: 'var(--text-primary)' }}>
+                  拖拽文件至此处，进行逐字稿转写提取
+                </div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                  或点击此区域选择本地音频 (.m4a / .mp3 / .wav)
+                </div>
+
                 <input
                   type="file"
                   ref={fileInputRef}
@@ -976,49 +1001,6 @@ export default function App() {
                   style={{ display: 'none' }}
                 />
               </div>
-
-              {/* 录音列表展示 */}
-              <div style={{ maxHeight: '120px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                {voiceMemos.length > 0 ? (
-                  voiceMemos.map((memo) => (
-                    <div
-                      key={memo.id}
-                      onClick={() => setSelectedMemo(memo)}
-                      className={`list-item-card ${selectedMemo?.id === memo.id ? 'selected' : ''}`}
-                      style={{ padding: '0.5rem 0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                    >
-                      <div style={{ fontSize: '0.85rem', fontWeight: '500', color: selectedMemo?.id === memo.id ? 'var(--primary)' : 'var(--text-primary)' }}>
-                        🎵 {memo.name}
-                      </div>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                        {(memo.size / 1024 / 1024).toFixed(1)}M
-                      </span>
-                    </div>
-                  ))
-                ) : (
-                  <div style={{ padding: '0.8rem 0.6rem', textAlign: 'center', background: 'rgba(0,0,0,0.02)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--panel-border)' }}>
-                    <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>
-                      因 macOS 隐私保护机制未自动扫描到已有录音
-                    </div>
-                    <button
-                      onClick={handleOpenVoiceMemosDir}
-                      className="btn-secondary"
-                      style={{ padding: '0.35rem 0.8rem', fontSize: '0.8rem', color: 'var(--primary)', borderColor: 'var(--primary)' }}
-                    >
-                      📂 点击直接打开 Mac 语音备忘录文件夹 (内含所有 .m4a 录音)
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <button
-                onClick={handleTranscribeSelectedMemo}
-                disabled={isTranscribing}
-                className="btn-secondary"
-                style={{ width: '100%', justifyContent: 'center', padding: '0.65rem', color: 'var(--primary)' }}
-              >
-                {isTranscribing ? '正在提取转写中...' : selectedMemo ? `⚡ 一键转写【${selectedMemo.name}】` : '⚡ 抓取或转写选中音频'}
-              </button>
 
               {recordingStatusNotice && (
                 <div className="audio-notice-bar">
