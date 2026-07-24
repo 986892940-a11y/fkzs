@@ -149,7 +149,7 @@ async function searchWebVisualReferences(themeTopic, customApiKey) {
 }
 
 /**
- * 构建 Nano Banana 2 (gemini-3.1-flash-image) 生图 Prompt
+ * 构建 Nano Banana 2 (gemini-3.1-flash-image) 全图 AI 艺术融合版 (方案 B) 生图 Prompt
  */
 export async function buildNanoBananaModulePrompt(themeTopic, moduleItem, courseTitle, customApiKey) {
   const points = moduleItem.points || [];
@@ -157,16 +157,16 @@ export async function buildNanoBananaModulePrompt(themeTopic, moduleItem, course
   const visualRefPrompt = await searchWebVisualReferences(themeTopic, customApiKey);
 
   return `
-[Visual Artwork Theme]:
-1. Full-bleed background scene: ${visualRefPrompt}
-2. Aspect Ratio: 16:9, Resolution: 2K (2752x1536).
-3. Composition: Rich cinematic wallpaper featuring iconic elements of "${themeTopic}".
+Create a magnificent 16:9 infographic poster artwork in authentic "${themeTopic}" artistic style.
 
-[Text Content Requirements]:
-1. Main Title: "${courseTitle || '本课核心知识图谱'} - ${moduleItem.moduleName}"
-2. Core Knowledge Points:
+[Artistic Visual Background & Worldbuilding]:
+${visualRefPrompt}, 16:9 ratio, 2K resolution, premium artistic texture, masterwork composition.
+
+[Integrated Knowledge Mindmap & Calligraphy Art (Option B Full Art Integration)]:
+1. Main Title Emblem: Stylized traditional Chinese title cartouche or scroll containing: "${courseTitle || '本课核心知识图谱'} - ${moduleItem.moduleName}"
+2. Core Knowledge Branches:
 ${pointsText}
-3. Integration: Render Chinese text sharply overlaid on the artwork with high contrast.
+3. Full Artwork Integration: Seamlessly embed all Chinese text, knowledge branch nodes, cartouche banners, and seals directly into the traditional painting artwork. No flat raw text overlays. Complete, cohesive, organic artistic masterpiece layout.
   `.trim();
 }
 
@@ -177,7 +177,7 @@ export async function generateSingleModuleImage(themeTopic, moduleItem, courseTi
   const apiKey = customApiKey || process.env.GEMINI_API_KEY;
   const prompt = await buildNanoBananaModulePrompt(themeTopic, moduleItem, courseTitle, customApiKey);
 
-  console.log(`[ImageComposer] 🍌 正在调用 Nano Banana 2 (gemini-3.1-flash-image) 生成主题【${themeTopic}】16:9 2K 海报...`);
+  console.log(`[ImageComposer] 🍌 正在调用 Nano Banana 2 (全图 AI 艺术融合版) 生成主题【${themeTopic}】16:9 2K 海报...`);
 
   if (apiKey) {
     const candidateModels = ['gemini-3.1-flash-image', 'gemini-3.1-flash-lite-image', 'imagen-3.0-generate-002'];
@@ -196,13 +196,13 @@ export async function generateSingleModuleImage(themeTopic, moduleItem, courseTi
           if (response) {
             // 匹配 Google Interactions 原生响应数据结构 (output_image.data)
             if (response.output_image && response.output_image.data) {
-              console.log(`[ImageComposer] 🎉 成功通过 ${targetModel} (output_image) 生成真实 16:9 2K AI 艺术海报！`);
+              console.log(`[ImageComposer] 🎉 成功通过 ${targetModel} (output_image) 生成全图 AI 艺术融合海报！`);
               return response.output_image.data.trim();
             }
             if (response.images && response.images[0]) {
               const b64 = response.images[0].base64 || response.images[0].bytesBase64Encoded || response.images[0].data;
               if (b64) {
-                console.log(`[ImageComposer] 🎉 成功通过 ${targetModel} (images[0]) 生成真实 16:9 2K AI 艺术海报！`);
+                console.log(`[ImageComposer] 🎉 成功通过 ${targetModel} (images[0]) 生成全图 AI 艺术融合海报！`);
                 return b64.trim();
               }
             }
@@ -218,7 +218,7 @@ export async function generateSingleModuleImage(themeTopic, moduleItem, courseTi
         if (sdkRes && sdkRes.generatedImages && sdkRes.generatedImages[0] && sdkRes.generatedImages[0].image) {
           const b64 = sdkRes.generatedImages[0].image.imageBytes;
           if (b64 && typeof b64 === 'string') {
-            console.log(`[ImageComposer] 🎉 成功通过 ${targetModel} (generateImages) 生成真实 AI 艺术海报！`);
+            console.log(`[ImageComposer] 🎉 成功通过 ${targetModel} (generateImages) 生成全图 AI 艺术融合海报！`);
             return b64.trim();
           }
         }
@@ -228,12 +228,12 @@ export async function generateSingleModuleImage(themeTopic, moduleItem, courseTi
     }
   }
 
-  // 降级场景：渲染大屏质感沉浸海报
+  // 降级场景：渲染方案 B 高质感全画框海报
   return renderAtmosphericCinematicPoster(themeTopic, moduleItem, courseTitle);
 }
 
 /**
- * 沉浸式电影级海报渲染器
+ * 方案 B 沉浸式高质感艺术海报渲染器 (SVG 典雅轴画框版)
  */
 function renderAtmosphericCinematicPoster(themeTopic, moduleItem, courseTitle) {
   const points = moduleItem.points || [];
@@ -241,22 +241,32 @@ function renderAtmosphericCinematicPoster(themeTopic, moduleItem, courseTitle) {
 
   let isWukong = str.includes('悟空') || str.includes('黑神话');
   let isZootopia = str.includes('动物城') || str.includes('疯狂动物城');
+  let isUkiyoe = str.includes('浮世绘');
 
   let primaryGlow = '#06b6d4';
   let accentGold = '#f59e0b';
   let baseDark1 = '#090d16';
   let baseDark2 = '#111827';
+  let cardBorderColor = 'rgba(245, 158, 11, 0.4)';
 
-  if (isWukong) {
+  if (isUkiyoe) {
+    primaryGlow = '#1e3a8a';
+    accentGold = '#b45309';
+    baseDark1 = '#faf6ed';
+    baseDark2 = '#f3ece0';
+    cardBorderColor = '#b45309';
+  } else if (isWukong) {
     primaryGlow = '#dc2626';
     accentGold = '#fbbf24';
     baseDark1 = '#0a090b';
     baseDark2 = '#2a110d';
+    cardBorderColor = '#fbbf24';
   } else if (isZootopia) {
     primaryGlow = '#06b6d4';
     accentGold = '#f59e0b';
     baseDark1 = '#080d1a';
     baseDark2 = '#1e1b4b';
+    cardBorderColor = '#06b6d4';
   }
 
   let pointsSvg = '';
@@ -265,13 +275,15 @@ function renderAtmosphericCinematicPoster(themeTopic, moduleItem, courseTitle) {
   points.forEach((item, idx) => {
     pointsSvg += `
       <g transform="translate(100, ${startY})">
-        <circle cx="26" cy="26" r="16" fill="${primaryGlow}" opacity="0.9" />
-        <text x="26" y="32" text-anchor="middle" font-family="PingFang SC, Arial Unicode MS, sans-serif" font-size="16" font-weight="bold" fill="#ffffff">${idx + 1}</text>
-        <text x="60" y="34" font-family="PingFang SC, Arial Unicode MS, sans-serif" font-size="23" font-weight="bold" fill="${accentGold}">${escapeXml(item.topic)}</text>
-        <text x="60" y="74" font-family="PingFang SC, Arial Unicode MS, sans-serif" font-size="18" fill="#f8fafc">${escapeXml(item.detail)}</text>
+        <rect x="0" y="0" width="1176" height="110" rx="12" fill="rgba(255,255,255,0.06)" stroke="${cardBorderColor}" stroke-width="1.2" />
+        <rect x="0" y="0" width="8" height="110" rx="4" fill="${accentGold}" />
+        <circle cx="42" cy="55" r="18" fill="${primaryGlow}" />
+        <text x="42" y="61" text-anchor="middle" font-family="PingFang SC, Arial Unicode MS, sans-serif" font-size="16" font-weight="bold" fill="#ffffff">${idx + 1}</text>
+        <text x="76" y="44" font-family="PingFang SC, Arial Unicode MS, sans-serif" font-size="22" font-weight="bold" fill="${accentGold}">${escapeXml(item.topic)}</text>
+        <text x="76" y="80" font-family="PingFang SC, Arial Unicode MS, sans-serif" font-size="17" fill="${isUkiyoe ? '#334155' : '#f8fafc'}">${escapeXml(item.detail)}</text>
       </g>
     `;
-    startY += 145;
+    startY += 135;
   });
 
   const svgHeight = Math.max(774, startY + 60);
@@ -281,27 +293,24 @@ function renderAtmosphericCinematicPoster(themeTopic, moduleItem, courseTitle) {
       <defs>
         <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stop-color="${baseDark1}" />
-          <stop offset="50%" stop-color="#111827" />
           <stop offset="100%" stop-color="${baseDark2}" />
         </linearGradient>
-        <radialGradient id="glowGlow" cx="80%" cy="30%" r="60%">
-          <stop offset="0%" stop-color="${primaryGlow}" stop-opacity="0.35" />
-          <stop offset="100%" stop-color="${baseDark1}" stop-opacity="0" />
-        </radialGradient>
-        <radialGradient id="goldGlow" cx="20%" cy="70%" r="50%">
-          <stop offset="0%" stop-color="${accentGold}" stop-opacity="0.25" />
-          <stop offset="100%" stop-color="${baseDark1}" stop-opacity="0" />
-        </radialGradient>
       </defs>
       <rect width="1376" height="${svgHeight}" fill="url(#bgGrad)" />
-      <rect width="1376" height="${svgHeight}" fill="url(#glowGlow)" />
-      <rect width="1376" height="${svgHeight}" fill="url(#goldGlow)" />
+      
+      <!-- 外围古典轴画边框 -->
+      <rect x="25" y="25" width="1326" height="${svgHeight - 50}" rx="16" fill="none" stroke="${accentGold}" stroke-width="2" opacity="0.7" />
 
-      <text x="688" y="95" text-anchor="middle" font-family="PingFang SC, Arial Unicode MS, sans-serif" font-size="36" font-weight="bold" fill="${accentGold}">${escapeXml(courseTitle || '本课核心知识图谱')} · ${escapeXml(moduleItem.moduleName)}</text>
-      <text x="688" y="148" text-anchor="middle" font-family="PingFang SC, Arial Unicode MS, sans-serif" font-size="19" font-weight="bold" fill="${primaryGlow}">◆ 艺术主题：${escapeXml(themeTopic || '通用主题')} ◆</text>
-      <line x1="488" y1="170" x2="888" y2="170" stroke="${accentGold}" stroke-width="2" opacity="0.6" />
+      <!-- 主标题卷轴块 -->
+      <g transform="translate(388, 50)">
+        <rect x="0" y="0" width="600" height="120" rx="16" fill="rgba(0,0,0,0.25)" stroke="${accentGold}" stroke-width="1.8" />
+        <text x="300" y="55" text-anchor="middle" font-family="PingFang SC, Arial Unicode MS, sans-serif" font-size="28" font-weight="bold" fill="${accentGold}">${escapeXml(courseTitle || '本课核心知识图谱')} · ${escapeXml(moduleItem.moduleName)}</text>
+        <text x="300" y="95" text-anchor="middle" font-family="PingFang SC, Arial Unicode MS, sans-serif" font-size="17" font-weight="bold" fill="${primaryGlow}">◆ 视觉风格：${escapeXml(themeTopic || '通用主题')} (方案 B 全图艺术融合) ◆</text>
+      </g>
+
       ${pointsSvg}
-      <text x="688" y="${svgHeight - 25}" text-anchor="middle" font-family="PingFang SC, Arial Unicode MS, sans-serif" font-size="14" fill="#94a3b8">Nano Banana 2 (gemini-3.1-flash-image) · 16:9 2K 横版知识海报</text>
+
+      <text x="688" y="${svgHeight - 20}" text-anchor="middle" font-family="PingFang SC, Arial Unicode MS, sans-serif" font-size="14" fill="#94a3b8">Imagen 3 / Nano Banana 2 · 全图 AI 艺术融合知识海报</text>
     </svg>
   `;
 
