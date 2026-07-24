@@ -247,14 +247,13 @@ export async function generateFeedbackFromAudio(audioPath, mimeType, studentName
  */
 export async function transcribeAudioToText(audioPath, mimeType, customApiKey) {
   const ai = getGeminiClient(customApiKey);
-  const systemInstruction = getSystemPrompt();
   const primaryModel = process.env.FEEDBACK_MODEL || 'gemini-3.5-flash';
 
   const safeMimeType = (mimeType && mimeType.includes('/')) 
     ? mimeType 
     : (audioPath.match(/\.mp3$/i) ? 'audio/mp3' : 'audio/m4a');
 
-  console.log(`[Gemini] 开始上传音频进行【课堂记录与逐字稿提取】: ${audioPath}, MimeType: ${safeMimeType}`);
+  console.log(`[Gemini] 开始上传音频进行【纯口语逐字稿转写】: ${audioPath}, MimeType: ${safeMimeType}`);
   
   let fileUpload;
   try {
@@ -274,11 +273,9 @@ export async function transcribeAudioToText(audioPath, mimeType, customApiKey) {
   const finalMimeType = fileUpload.mimeType || safeMimeType || 'audio/m4a';
 
   try {
-    const promptText = `这是今天的语文课堂录音音频。请仔细倾听录音内容，提取整理出一份详细、完整的【课堂授课记录与逐字实录文本】。\n\n` +
-      `【整理与提取要求】：\n` +
-      `1. 请原汁原味地整理音频中老师讲解的核心知识点、文章句段分析、师生互动问答以及举例内容。\n` +
-      `2. 保持课堂实录信息的准确度与丰富度，便于教师进行二次人工查阅与编辑修改。\n` +
-      `3. 格式请使用清晰规范的文字段落排版，只输出课堂实录文本本身，以便直接自动填入逐字稿文本框中。`;
+    const sttSystemInstruction = "你是一个专业高效的语音识别与课堂口语速记员。你的唯一任务是听取音频，并将音频中听到的口语对话、讲课内容、问答与细节原汁原味地转写为纯文本格式的口语逐字稿。绝对严禁生成‘课堂记录’、‘课堂回顾’、‘授课内容’、‘考点拆解’等任何反馈报告格式或教研分析结构！";
+
+    const promptText = "请听这段课堂实录音频，将其中的所有口语讲话、老师讲解与师生交流内容，原汁原味地转写为纯文本逐字稿。请直接输出文字内容本身，绝对不要包含‘课堂记录：’、‘课堂回顾：’或任何总结报告标题。";
 
     const candidateModels = [primaryModel, 'gemini-3-flash-preview', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
     let responseText = null;
@@ -292,7 +289,7 @@ export async function transcribeAudioToText(audioPath, mimeType, customApiKey) {
 
     for (const modelName of candidateModels) {
       try {
-        console.log(`[Gemini] 正在调用模型 ${modelName} 提取课堂逐字实录...`);
+        console.log(`[Gemini] 正在调用模型 ${modelName} 提取纯口语逐字稿...`);
         const response = await ai.models.generateContent({
           model: modelName,
           contents: [
@@ -300,8 +297,8 @@ export async function transcribeAudioToText(audioPath, mimeType, customApiKey) {
             { text: promptText }
           ],
           config: {
-            systemInstruction: systemInstruction,
-            temperature: 0.3,
+            systemInstruction: sttSystemInstruction,
+            temperature: 0.2,
           }
         });
 
@@ -310,7 +307,7 @@ export async function transcribeAudioToText(audioPath, mimeType, customApiKey) {
           break;
         }
       } catch (err) {
-        console.warn(`[Gemini] 模型 ${modelName} 逐字实录提取尝试失败: ${err.message}`);
+        console.warn(`[Gemini] 模型 ${modelName} 纯口语逐字稿提取尝试失败: ${err.message}`);
       }
     }
 
