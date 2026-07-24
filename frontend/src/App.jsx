@@ -870,7 +870,7 @@ export default function App() {
                 <label className="form-label">学生姓名</label>
                 <input
                   type="text"
-                  placeholder="如：彭梓辰"
+                  placeholder="请输入学生姓名"
                   value={studentName}
                   onChange={(e) => setStudentName(e.target.value)}
                   className="form-input"

@@ -334,6 +334,7 @@ function cleanMarkdown(text) {
     .replace(/\*{1,3}(.*?)\*{1,3}/g, '$1') 
     .replace(/^#+\s+/gm, '')               
     .replace(/\[\d+\]/g, '')               
-    .replace(/^-\s+/gm, '')                
+    .replace(/^-\s+/gm, '')
+    .replace(/\s*[（\(]续[）\)]/g, '')              
     .trim();
 }

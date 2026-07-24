@@ -169,28 +169,32 @@ export function generateFeedbackPDF({
       for (let i = 0; i < totalPageCount; i++) {
         doc.switchToPage(i);
 
-        // A. 页眉：顶部线 + 标语
-        doc.fontSize(9).fillColor('#64748b').text(headerSlogan, startX, 22, {
+        // A. 页眉：顶部细线 + 标语 Slogan
+        doc.fontSize(8.5).fillColor('#64748b').text(headerSlogan, startX, 22, {
           width: pageWidth,
-          align: 'center'
+          align: 'center',
+          lineBreak: false
         });
-        doc.strokeColor('#cbd5e1').lineWidth(0.5).moveTo(startX, 34).lineTo(startX + pageWidth, 34).stroke();
+        doc.strokeColor('#e2e8f0').lineWidth(0.5).moveTo(startX, 34).lineTo(startX + pageWidth, 34).stroke();
 
-        // B. 页脚：页脚线 + 品牌 Slogan + 动态页码
-        const footerY = 812;
-        doc.strokeColor('#cbd5e1').lineWidth(0.5).moveTo(startX, footerY - 10).lineTo(startX + pageWidth, footerY - 10).stroke();
+        // B. 页脚：安全高度 788 pt (预留边距，绝不触碰底边界产生空白页)
+        const footerY = 788;
+        doc.strokeColor('#e2e8f0').lineWidth(0.5).moveTo(startX, footerY - 8).lineTo(startX + pageWidth, footerY - 8).stroke();
 
-        // 左下角/中央品牌 Slogan
-        doc.fontSize(8.5).fillColor('#94a3b8').text('尘埃落定 · 始见星辰', startX, footerY, {
+        // 左下角：品牌 Slogan
+        const brandSlogan = '尘埃落定 · 始见星辰';
+        doc.fontSize(8.5).fillColor('#94a3b8').text(brandSlogan, startX, footerY, {
           width: pageWidth / 2,
-          align: 'left'
+          align: 'left',
+          lineBreak: false
         });
 
-        // 右下角精准动态页码：— 第 X 页 / 共 Y 页 —
-        const pageNumText = `— 第 ${i + 1} 页 / 共 ${totalPageCount} 页 —`;
-        doc.fontSize(8.5).fillColor('#64748b').text(pageNumText, startX + pageWidth / 2, footerY, {
+        // 底部中央/右侧：优雅页码 `- 1 -`, `- 2 -`
+        const pageNumText = `- ${i + 1} -`;
+        doc.fontSize(9).fillColor('#64748b').text(pageNumText, startX + pageWidth / 2, footerY, {
           width: pageWidth / 2,
-          align: 'right'
+          align: 'right',
+          lineBreak: false
         });
       }
 
@@ -336,36 +340,15 @@ function parseSectionsAST(lines) {
  * 渲染宣纸 AST 顶级主卡片
  */
 function renderLiteratiCardAST(doc, startX, pageWidth, sec, checkPageOverflow) {
-  const title = sec.title || '';
+  const rawTitle = sec.title || '';
   const lines = sec.lines || [];
 
   if (lines.length === 0) return;
 
-  const lineGroups = groupLinesForCleanLayout(lines);
+  // 清洗可能包含在 AI 响应中的 '(续)' 或 '（续）' 杂质符号
+  const title = rawTitle.replace(/\s*[（\(]续[）\)]\s*/g, '').trim();
 
-  lineGroups.forEach((group, idx) => {
-    const cardTitle = idx === 0 ? title : (title ? `${title} (续)` : '');
-    renderSingleSubCard(doc, startX, pageWidth, cardTitle, group, checkPageOverflow);
-  });
-}
-
-function groupLinesForCleanLayout(lines) {
-  const groups = [];
-  let currentGroup = [];
-
-  for (const line of lines) {
-    currentGroup.push(line);
-    if (currentGroup.length >= 7 || (isSubHeaderLine(line) && currentGroup.length >= 4)) {
-      groups.push(currentGroup);
-      currentGroup = [];
-    }
-  }
-
-  if (currentGroup.length > 0) {
-    groups.push(currentGroup);
-  }
-
-  return groups;
+  renderSingleSubCard(doc, startX, pageWidth, title, lines, checkPageOverflow);
 }
 
 function renderSingleSubCard(doc, startX, pageWidth, title, lines, checkPageOverflow) {
