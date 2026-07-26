@@ -44,7 +44,7 @@ export function generateFeedbackPDF({
 
       const pageWidth = 525;
       const startX = 35;
-      const PAGE_MAX_Y = 720; // 优化后的安全溢出高度
+      const PAGE_MAX_Y = 765; // 优化后的精准安全高度 (预留页脚 814pt 安全边距)
 
       // 动态绘制茶墨竹纸背景色函数
       const drawPaperBackground = () => {
@@ -60,7 +60,7 @@ export function generateFeedbackPDF({
       const checkPageOverflow = (needHeight) => {
         if (doc.y + needHeight > PAGE_MAX_Y) {
           doc.addPage();
-          drawPaperBackground(); // 新页面同样填充茶墨竹纸底色
+          drawPaperBackground(); // 新页面填充茶墨竹纸底色
           doc.y = 40;
         }
       };
@@ -157,7 +157,7 @@ export function generateFeedbackPDF({
           if (!imgBuf) continue;
           try {
             const imgWidth = 440;
-            const imgHeight = 210; // 智能锁定高度，防止死板超长
+            const imgHeight = 210; // 智能锁定高度
             checkPageOverflow(imgHeight + 30);
 
             const badgeY = doc.y;
@@ -234,7 +234,7 @@ export function generateFeedbackPDF({
 function renderLiteratiCardAST(doc, startX, pageWidth, sec, checkPageOverflow) {
   const { title, lines } = sec;
 
-  // 如果该模块包含多个子标题 (如考点、题目、建议)，拆分为独立子卡片绘制
+  // 如果该模块包含多个子标题 (如考点拆解)，拆分为独立子卡片绘制
   const subBlocks = splitSectionIntoSubBlocks(lines);
 
   if (subBlocks.length > 1) {
@@ -269,17 +269,28 @@ function splitSectionIntoSubBlocks(lines) {
   return blocks;
 }
 
+function extractQuoteText(line) {
+  const clean = cleanMarkdownSymbols(line);
+  if (!clean.startsWith('>')) return '';
+  return clean
+    .replace(/^>\s*/, '')
+    .replace(/^[“"”'‘`\s]+|[“"”'‘`\s]+$/g, '')
+    .trim();
+}
+
 function renderSingleSubCard(doc, startX, pageWidth, title, lines, checkPageOverflow) {
   doc.fontSize(9.5);
   let contentHeight = 0;
 
-  // 预测高度
+  // 1. 预测真实高度 (过滤空白引用)
   for (const l of lines) {
     const clean = cleanMarkdownSymbols(l);
     if (!clean) continue;
 
     if (l.startsWith('>')) {
-      const quoteText = clean.replace(/^>\s*/, '');
+      const quoteText = extractQuoteText(l);
+      if (!quoteText || quoteText.length === 0) continue; // 关键防御：过滤多余空引号
+
       const h = doc.heightOfString(`“ ${quoteText} ”`, { width: pageWidth - 48, lineGap: 3 });
       contentHeight += Math.max(24, h + 8) + 6;
     } else if (isSubHeaderLine(l)) {
@@ -325,8 +336,10 @@ function renderSingleSubCard(doc, startX, pageWidth, title, lines, checkPageOver
     if (!clean) continue;
 
     if (l.startsWith('>')) {
-      // 引用金句竹简框
-      const quoteText = clean.replace(/^>\s*/, '');
+      // 引用金句竹简框 (防御空引号)
+      const quoteText = extractQuoteText(l);
+      if (!quoteText || quoteText.length === 0) continue;
+
       doc.fontSize(9);
       const textInQuoteH = doc.heightOfString(`“ ${quoteText} ”`, { width: pageWidth - 48, lineGap: 3 });
       const quoteBoxH = Math.max(24, textInQuoteH + 8);
@@ -451,10 +464,27 @@ function renderParagraphWithColonBold(doc, text, x, y, width, fontSize = 9, defa
   const drawX = (needIndent && !isListItem) ? x + 10 : x;
   const drawWidth = (needIndent && !isListItem) ? width - 10 : width;
 
-  doc.fillColor(defaultColor).text(cleanText, drawX, y, {
-    width: drawWidth,
-    lineGap: 3
-  });
+  const colonIndex = cleanText.indexOf('：') !== -1 ? cleanText.indexOf('：') : cleanText.indexOf(':');
+
+  if (colonIndex > 0 && colonIndex < 12) {
+    const prefix = cleanText.substring(0, colonIndex + 1);
+    const body = cleanText.substring(colonIndex + 1);
+
+    doc.fillColor('#3D3B37').text(prefix, drawX, y, {
+      width: drawWidth,
+      lineGap: 3,
+      continued: true
+    });
+    doc.fillColor(defaultColor).text(body, {
+      width: drawWidth,
+      lineGap: 3
+    });
+  } else {
+    doc.fillColor(defaultColor).text(cleanText, drawX, y, {
+      width: drawWidth,
+      lineGap: 3
+    });
+  }
 }
 
 // -------------------------------------------------------------
@@ -483,10 +513,11 @@ function cleanMarkdownSymbols(str) {
 
 function isSubHeaderLine(line) {
   const clean = cleanMarkdownSymbols(line);
-  return /^\d+\.\s+/.test(clean) ||
-         /^【.*?】/.test(clean) ||
+  // 子标题仅匹配大模块子章节名称（如：1. 理论考点拆解；【考点精讲】；考点一），不将普通数字序号作业/列表当作独立切片卡片
+  return /^【.*?】/.test(clean) ||
          /^考点[一二三四五六七八九十\d]+/.test(clean) ||
-         /^[一二三四五六七八九十]+[\.\、\s]/.test(clean);
+         /^[一二三四五六七八九十]+[\.\、\s]/.test(clean) ||
+         (/^\d+\.\s+[\u4e00-\u9fa5]{2,10}(研读|拆解|讲解|分析|梳理|突破|解析|构架|应用|训练|语法|词汇|表达)/.test(clean));
 }
 
 function parseSectionsAST(lines) {
