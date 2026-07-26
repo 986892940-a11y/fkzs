@@ -607,7 +607,7 @@ export default function App() {
               <div key={imgIdx} className="knowledge-image-card" style={{ padding: '1rem', textAlign: 'center' }}>
                 <div style={{ fontSize: '0.88rem', color: 'var(--primary)', fontWeight: '600', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                  2K AI 知识高精海报 {knowledgeImagesBase64.length > 1 ? `(模块 ${imgIdx + 1})` : ''} · 主题: {customThemePrompt || '宋代山水画意境'}
+                  本节课知识图谱 {knowledgeImagesBase64.length > 1 ? `(模块 ${imgIdx + 1})` : ''}
                 </div>
                 <img
                   src={`data:image/jpeg;base64,${imgBase64}`}
