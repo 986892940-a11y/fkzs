@@ -659,7 +659,7 @@ export default function App() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
               <h1 style={{ margin: 0, fontSize: '1.6rem' }}>反馈助手</h1>
-              <span className="version-pill">v2.0 Pro</span>
+              <span className="version-pill">v3.0 Pro</span>
             </div>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.84rem', marginTop: '0.1rem' }}>
               智绘课后 · 素雅高质感教学反馈
