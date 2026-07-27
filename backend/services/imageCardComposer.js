@@ -74,7 +74,7 @@ export async function extractModulesAndKnowledgePoints(transcriptText, customApi
   "courseTitle": "本课核心知识图谱",
   "modules": [
     {
-      "moduleName": "模块名称（如：文言实词与句式精讲）",
+      "moduleName": "模块名称（如：文言实虚词积累与句式解析）",
       "points": [
         {
           "topic": "知识点名称A",
@@ -165,16 +165,16 @@ async function searchWebVisualReferences(themeTopic, customApiKey) {
     }
   } catch (e) {}
 
-  return `A high quality 16:9 cinematic wallpaper artwork in visual style of "${rawTopic}", atmospheric lighting, epic background`;
+  return `Song Dynasty Ink Landscape Painting with misty mountains, ancient pine trees, cloud ocean, traditional pavilion, epic ink atmosphere`;
 }
 
 /**
- * 构建 Nano Banana 2 / Imagen 3 防文字重复生图 Prompt
+ * 构建 Nano Banana 2 / Imagen 3 典籍立轴古风生图 Prompt (100% 照应图二“宋代山水画+中央立轴卷轴+竹简节点+朱砂印章”)
  */
 export async function buildNanoBananaModulePrompt(themeTopic, moduleItem, courseTitle, customApiKey) {
   const rawPoints = moduleItem.points || [];
   
-  // 严密去重：确保传入 AI 生图模型的知识点绝对没有重复项
+  // 严密去重
   const seen = new Set();
   const uniquePoints = [];
   for (const p of rawPoints) {
@@ -186,27 +186,34 @@ export async function buildNanoBananaModulePrompt(themeTopic, moduleItem, course
     }
   }
 
-  // 精简至最多 3 个关键分支（防止扩散模型多分支乱推乱拷）
+  // 精简至最多 3 个关键分支
   const displayPoints = uniquePoints.slice(0, 3);
-  const pointsText = displayPoints.map((p, i) => `Branch ${i + 1} [UNIQUE TEXT]: "${p.topic}: ${p.detail.slice(0, 18)}"`).join('\n');
-  const visualRefPrompt = await searchWebVisualReferences(themeTopic, customApiKey);
+  const pointsText = displayPoints.map((p, i) => 
+    `Branch Node ${i + 1}:
+  - Branch Badge Title (Vertical Bamboo Slip/Jade Badge): "${p.topic}"
+  - Branch Explanatory Note: "${i + 1}.${p.topic}: ${p.detail.slice(0, 22)}"`
+  ).join('\n');
+
+  const mainTitleText = `${courseTitle || '本课核心知识图谱'}——${moduleItem.moduleName}`;
 
   return `
-Create a magnificent 16:9 infographic poster artwork in authentic "${themeTopic}" artistic style.
+Create a breathtaking 16:9 Chinese Masterpiece Painting Infographic Mindmap Poster in authentic Song Dynasty Ink Landscape Painting style (宋代水墨山水画意境 with misty mountains, ancient pine trees, cloud ocean, traditional pavilion, and epic ink atmosphere).
 
-[Artistic Visual Background & Worldbuilding]:
-${visualRefPrompt}, 16:9 ratio, 2K resolution, premium artistic texture, masterwork composition.
+[Central Hanging Scroll Banner & Calligraphy Art (中央立轴古风卷轴)]:
+- Hanging vertically in the center of the misty mountain landscape background: A magnificent traditional Chinese hanging scroll (中央立轴卷轴) with wooden scroll rollers at top and bottom.
+- Inside the central hanging scroll: Large, elegant vertical Chinese brush calligraphy title: "${mainTitleText}".
+- Stamped at the bottom corner of the scroll: Traditional red vermilion square seal stamps (朱砂印章).
 
-[Integrated Knowledge Mindmap & Calligraphy Art]:
-Main Title Banner: "${courseTitle || '本课核心知识图谱'} - ${moduleItem.moduleName}"
-
-Core Knowledge Branches (STRICTLY UNIQUE - ZERO DUPLICATION ALLOWED):
+[Integrated Flowing Ink Mindmap Branches (水墨分支与古风竹简节点)]:
+- Branching out from the central hanging scroll to the right across the landscape: Elegant curved black ink brush lines (水墨分支触角).
+- At the start of each branch: Carved traditional Chinese bamboo slip badge or jade plaque (古风竹简/玉牌节点) containing vertical Chinese characters.
+- Next to each branch badge: Beautiful Chinese calligraphy explanatory text notes:
 ${pointsText}
 
-[CRITICAL ACCURACY & DEDUPLICATION INSTRUCTIONS]:
-1. STRICTLY ZERO TEXT REPETITION: Each branch node MUST render its OWN UNIQUE text. DO NOT copy, clone, or repeat text from Branch 1 onto Branch 2, or from Branch 3 onto Branch 4.
-2. Every branch node must display distinct, non-duplicated Chinese calligraphy text.
-3. Full Artwork Integration: Seamlessly embed all title cartouche banners and mindmap nodes into the traditional painting background.
+[CRITICAL ARTISTIC INTEGRATION RULES]:
+1. COMPLETE ORGANIC ARTWORK INTEGRATION: Every scroll, bamboo badge, red seal, brush line, and Chinese text character MUST be seamlessly painted directly into the ancient Chinese landscape artwork. No flat digital overlays or floating text boxes.
+2. STRICTLY ZERO TEXT DUPLICATION: Each branch node MUST render its OWN UNIQUE text. DO NOT copy or repeat text across branches.
+3. Aspect ratio: 16:9, 2K resolution, museum quality Song Dynasty traditional silk painting texture.
   `.trim();
 }
 
