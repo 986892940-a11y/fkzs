@@ -52,7 +52,7 @@ function getGeminiClient(customApiKey) {
 }
 
 /**
- * 从逐字稿提取核心考点与逻辑模块
+ * 从逐字稿提取核心考点与逻辑模块 (增加严密去重机制)
  */
 export async function extractModulesAndKnowledgePoints(transcriptText, customApiKey) {
   try {
@@ -63,21 +63,26 @@ export async function extractModulesAndKnowledgePoints(transcriptText, customApi
     const prompt = `
 你是一个严谨的语文学科知识图谱提取专家。请仔细阅读以下课堂逐字稿，按逻辑模块提取出本节课中所有重要的核心考点与知识要点。
 
-【提取规则】：
-1. 梳理本节课涉及的所有核心模块；
-2. 每个模块列出其包含的所有重要知识考点与详细解析（考点名称8字以内，详细解析30字以内）；
-3. 必须直接输出标准 JSON。
+【提取与去重规则】：
+1. 梳理本节课涉及的核心模块；
+2. 每个模块列出 2-3 个【互不相同】的核心知识考点与详细解析（考点名称8字以内，详细解析20字以内）；
+3. 严禁出现重复或相似的解析文本！每个考点解析必须独一无二。
+4. 必须直接输出标准 JSON。
 
 【输出 JSON 结构】：
 {
   "courseTitle": "本课核心知识图谱",
   "modules": [
     {
-      "moduleName": "模块名称（如：人物描写与环境分析）",
+      "moduleName": "模块名称（如：文言实词与句式精讲）",
       "points": [
         {
-          "topic": "知识点名称",
-          "detail": "核心解析与说明"
+          "topic": "知识点名称A",
+          "detail": "专属独一无二的核心解析A"
+        },
+        {
+          "topic": "知识点名称B",
+          "detail": "专属独一无二的核心解析B"
         }
       ]
     }
@@ -91,13 +96,28 @@ ${safeText.slice(0, 2500)}
     const res = await ai.models.generateContent({
       model: modelName,
       contents: [{ text: prompt }],
-      config: { temperature: 0.2 }
+      config: { temperature: 0.1 }
     });
 
     if (res && res.text) {
       const cleanJson = res.text.replace(/```json/gi, '').replace(/```/g, '').trim();
       const data = JSON.parse(cleanJson);
       if (data && data.modules && data.modules.length > 0) {
+        // 程序级深度去重过滤
+        data.modules.forEach(mod => {
+          if (Array.isArray(mod.points)) {
+            const seen = new Set();
+            mod.points = mod.points.filter(pt => {
+              if (!pt || !pt.topic || !pt.detail) return false;
+              const key = `${pt.topic.trim()}_${pt.detail.trim()}`;
+              const detailKey = pt.detail.trim();
+              if (seen.has(key) || seen.has(detailKey)) return false;
+              seen.add(key);
+              seen.add(detailKey);
+              return true;
+            });
+          }
+        });
         return data;
       }
     }
@@ -111,9 +131,9 @@ ${safeText.slice(0, 2500)}
       {
         moduleName: "现代文阅读核心考点精讲",
         points: [
-          { topic: "环境描写作用", detail: "交代背景、渲染氛围、推动情节、烘托人物、深化主旨。" },
-          { topic: "环境分析五步骤", detail: "概括画面、联系上下文、多角度分析、分主次、感官剖析。" },
-          { topic: "核心意象作用", detail: "以小见大，通过普通意象彰显宏大精神与主题。" }
+          { topic: "环境描写作用", detail: "交代背景、渲染氛围、烘托人物孤寂内心。" },
+          { topic: "环境分析五步骤", detail: "概括画面、多角度剖析、联系主旨解析。" },
+          { topic: "核心意象解析", detail: "以小见大，彰显宏大精神与时代主题。" }
         ]
       }
     ]
@@ -149,11 +169,26 @@ async function searchWebVisualReferences(themeTopic, customApiKey) {
 }
 
 /**
- * 构建 Nano Banana 2 (gemini-3.1-flash-image) 全图 AI 艺术融合版 (方案 B) 生图 Prompt
+ * 构建 Nano Banana 2 / Imagen 3 防文字重复生图 Prompt
  */
 export async function buildNanoBananaModulePrompt(themeTopic, moduleItem, courseTitle, customApiKey) {
-  const points = moduleItem.points || [];
-  const pointsText = points.map((p, i) => `${i + 1}. ${p.topic}: ${p.detail}`).join('; ');
+  const rawPoints = moduleItem.points || [];
+  
+  // 严密去重：确保传入 AI 生图模型的知识点绝对没有重复项
+  const seen = new Set();
+  const uniquePoints = [];
+  for (const p of rawPoints) {
+    if (!p || !p.topic || !p.detail) continue;
+    const cleanDetail = p.detail.trim();
+    if (!seen.has(cleanDetail)) {
+      seen.add(cleanDetail);
+      uniquePoints.push(p);
+    }
+  }
+
+  // 精简至最多 3 个关键分支（防止扩散模型多分支乱推乱拷）
+  const displayPoints = uniquePoints.slice(0, 3);
+  const pointsText = displayPoints.map((p, i) => `Branch ${i + 1} [UNIQUE TEXT]: "${p.topic}: ${p.detail.slice(0, 18)}"`).join('\n');
   const visualRefPrompt = await searchWebVisualReferences(themeTopic, customApiKey);
 
   return `
@@ -162,11 +197,16 @@ Create a magnificent 16:9 infographic poster artwork in authentic "${themeTopic}
 [Artistic Visual Background & Worldbuilding]:
 ${visualRefPrompt}, 16:9 ratio, 2K resolution, premium artistic texture, masterwork composition.
 
-[Integrated Knowledge Mindmap & Calligraphy Art (Option B Full Art Integration)]:
-1. Main Title Emblem: Stylized traditional Chinese title cartouche or scroll containing: "${courseTitle || '本课核心知识图谱'} - ${moduleItem.moduleName}"
-2. Core Knowledge Branches:
+[Integrated Knowledge Mindmap & Calligraphy Art]:
+Main Title Banner: "${courseTitle || '本课核心知识图谱'} - ${moduleItem.moduleName}"
+
+Core Knowledge Branches (STRICTLY UNIQUE - ZERO DUPLICATION ALLOWED):
 ${pointsText}
-3. Full Artwork Integration: Seamlessly embed all Chinese text, knowledge branch nodes, cartouche banners, and seals directly into the traditional painting artwork. No flat raw text overlays. Complete, cohesive, organic artistic masterpiece layout.
+
+[CRITICAL ACCURACY & DEDUPLICATION INSTRUCTIONS]:
+1. STRICTLY ZERO TEXT REPETITION: Each branch node MUST render its OWN UNIQUE text. DO NOT copy, clone, or repeat text from Branch 1 onto Branch 2, or from Branch 3 onto Branch 4.
+2. Every branch node must display distinct, non-duplicated Chinese calligraphy text.
+3. Full Artwork Integration: Seamlessly embed all title cartouche banners and mindmap nodes into the traditional painting background.
   `.trim();
 }
 
@@ -194,7 +234,6 @@ export async function generateSingleModuleImage(themeTopic, moduleItem, courseTi
           });
 
           if (response) {
-            // 匹配 Google Interactions 原生响应数据结构 (output_image.data)
             if (response.output_image && response.output_image.data) {
               console.log(`[ImageComposer] 🎉 成功通过 ${targetModel} (output_image) 生成全图 AI 艺术融合海报！`);
               return response.output_image.data.trim();
@@ -233,10 +272,25 @@ export async function generateSingleModuleImage(themeTopic, moduleItem, courseTi
 }
 
 /**
- * 方案 B 沉浸式高质感艺术海报渲染器 (SVG 典雅轴画框版)
+ * 方案 B 沉浸式高质感艺术海报渲染器 (SVG 典雅轴画框版，带深度去重机制)
  */
 function renderAtmosphericCinematicPoster(themeTopic, moduleItem, courseTitle) {
-  const points = moduleItem.points || [];
+  const rawPoints = moduleItem.points || [];
+
+  // 程序级严格去重
+  const seen = new Set();
+  const points = [];
+  for (const p of rawPoints) {
+    if (!p || !p.topic || !p.detail) continue;
+    const key = `${p.topic.trim()}_${p.detail.trim()}`;
+    const detailKey = p.detail.trim();
+    if (!seen.has(key) && !seen.has(detailKey)) {
+      seen.add(key);
+      seen.add(detailKey);
+      points.push(p);
+    }
+  }
+
   const str = String(themeTopic || '').toLowerCase();
 
   let isWukong = str.includes('悟空') || str.includes('黑神话');
