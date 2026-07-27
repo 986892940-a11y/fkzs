@@ -376,21 +376,61 @@ function renderDualColumnMasteryCard(doc, startX, pageWidth, sec, checkPageOverf
 
   const leftLines = [];
   const rightLines = [];
-  let currentGroup = leftLines;
 
-  for (const l of lines) {
-    const clean = cleanMarkdownSymbols(l);
+  // 1. 精准寻找右侧“建议/巩固/薄弱/改进”独立子标题行的索引
+  let splitIndex = -1;
+
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    const clean = cleanMarkdownSymbols(l).trim();
     if (!clean) continue;
 
-    if (clean.includes('建议') || clean.includes('薄弱') || clean.includes('巩固') || clean.includes('提升') || clean.includes('去口语化')) {
-      currentGroup = rightLines;
+    const trimmedRaw = l.trim();
+    const isBulletItem = trimmedRaw.startsWith('-') || trimmedRaw.startsWith('*') || /^\d+\./.test(trimmedRaw);
+
+    // 检查是否为右侧“建议/巩固/薄弱/改进”的独立子标题行（而非带有“提升”等动词的列表内容）
+    const isRightHeader = !isBulletItem && clean.length <= 25 && (
+      clean.startsWith('课后') ||
+      clean.startsWith('建议') ||
+      clean.startsWith('薄弱') ||
+      clean.startsWith('改进') ||
+      clean.includes('巩固与建议') ||
+      clean.includes('薄弱与建议') ||
+      clean.includes('课后建议') ||
+      clean.includes('改进与反思')
+    );
+
+    if (isRightHeader) {
+      splitIndex = i;
+      break;
     }
-    currentGroup.push(l);
   }
 
-  if (leftLines.length > 0 && rightLines.length === 0 && leftLines.length >= 2) {
-    const mid = Math.ceil(leftLines.length / 2);
-    rightLines.push(...leftLines.splice(mid));
+  // 2. 切分左右两列
+  if (splitIndex !== -1) {
+    leftLines.push(...lines.slice(0, splitIndex));
+    rightLines.push(...lines.slice(splitIndex));
+  } else {
+    // 降级分栏方案：仅在独立子标题行切换，避免误匹配正文中包含的“提升”、“建议”等动词
+    let currentGroup = leftLines;
+    for (const l of lines) {
+      const clean = cleanMarkdownSymbols(l).trim();
+      if (!clean) continue;
+      const trimmedRaw = l.trim();
+      const isBulletItem = trimmedRaw.startsWith('-') || trimmedRaw.startsWith('*') || /^\d+\./.test(trimmedRaw);
+      
+      if (!isBulletItem && clean.length <= 25 && (clean.includes('建议') || clean.includes('巩固') || clean.includes('薄弱') || clean.includes('改进'))) {
+        currentGroup = rightLines;
+      }
+      currentGroup.push(l);
+    }
+  }
+
+  // 3. 兜底处理：避免出现单列完全空缺
+  if (leftLines.length === 0 && rightLines.length > 0) {
+    leftLines.push(...rightLines.splice(0, Math.ceil(rightLines.length / 2)));
+  } else if (rightLines.length === 0 && leftLines.length >= 2) {
+    rightLines.push(...leftLines.splice(Math.ceil(leftLines.length / 2)));
   }
 
   doc.fontSize(9);
