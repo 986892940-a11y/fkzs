@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import crypto from 'crypto';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
@@ -7,6 +8,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 let mainWindow;
+const localApiToken = crypto.randomBytes(32).toString('hex');
+process.env.FEEDBACK_API_TOKEN = localApiToken;
 
 // 1. 在 Electron 主进程中优雅同进程启动 Express 后端 API 服务
 async function startBackendService() {
@@ -33,7 +36,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      webSecurity: false
+      webSecurity: true
     }
   });
 
@@ -64,6 +67,13 @@ function createWindow() {
 
 // 3. 原生 PDF 保存对话框 IPC
 function setupIpcHandlers() {
+  ipcMain.handle('get-local-api-token', (event) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) {
+      throw new Error('未授权的 API 令牌请求');
+    }
+    return localApiToken;
+  });
+
   ipcMain.handle('save-pdf', async (event, { pdfBase64, defaultName }) => {
     if (!mainWindow) return { success: false, error: '窗口无效' };
 

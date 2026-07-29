@@ -17,6 +17,12 @@ const CANDIDATE_DIRS = [
   path.join(os.homedir(), '.feedback_assistant', 'recordings')
 ];
 
+const AUDIO_EXTENSIONS = new Set(['.m4a', '.mp3', '.wav', '.aac']);
+
+function isAudioFile(filePath) {
+  return AUDIO_EXTENSIONS.has(path.extname(filePath).toLowerCase());
+}
+
 /**
  * 唤起 macOS 原生语音备忘录应用 (VoiceMemos)
  */
@@ -59,10 +65,11 @@ export function getVoiceMemosList() {
       try {
         const files = fs.readdirSync(dirPath);
         for (const file of files) {
-          if (file.endsWith('.m4a') || file.endsWith('.mp3') || file.endsWith('.wav') || file.endsWith('.aac')) {
+          if (isAudioFile(file)) {
             const filePath = path.join(dirPath, file);
             try {
               const stat = fs.statSync(filePath);
+              if (!stat.isFile()) continue;
               memoFiles.push({
                 id: filePath,
                 name: file.replace(/\.\w+$/, ''),
@@ -89,6 +96,12 @@ export function getVoiceMemosList() {
 }
 
 export const getVoiceMemos = getVoiceMemosList;
+
+export function getVoiceMemoByPath(memoPath) {
+  if (typeof memoPath !== 'string' || !memoPath) return null;
+  const normalizedPath = path.resolve(memoPath);
+  return getVoiceMemosList().find((memo) => path.resolve(memo.path) === normalizedPath) || null;
+}
 
 /**
  * 获取最新的录音文件

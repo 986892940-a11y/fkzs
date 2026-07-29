@@ -2,6 +2,24 @@ import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 
 const API_BASE = 'http://127.0.0.1:5001/api';
+let localApiTokenPromise;
+
+function getLocalApiToken() {
+  if (!localApiTokenPromise) {
+    if (!window.electronAPI?.getLocalApiToken) {
+      return Promise.reject(new Error('无法建立安全的本地服务连接'));
+    }
+    localApiTokenPromise = window.electronAPI.getLocalApiToken();
+  }
+  return localApiTokenPromise;
+}
+
+async function apiFetch(endpoint, options = {}) {
+  const token = await getLocalApiToken();
+  const headers = new Headers(options.headers || {});
+  headers.set('X-Feedback-Token', token);
+  return fetch(`${API_BASE}${endpoint}`, { ...options, headers });
+}
 
 const DEFAULT_QUICK_THEMES = [
   '疯狂动物城',
@@ -82,7 +100,7 @@ export default function App() {
 
   const fetchVoiceMemos = async () => {
     try {
-      const res = await fetch(`${API_BASE}/voice-memos`);
+      const res = await apiFetch('/voice-memos');
       const result = await res.json();
       if (result.success && Array.isArray(result.data)) {
         setVoiceMemos(result.data);
@@ -160,7 +178,7 @@ export default function App() {
     setError('');
     setRecordingStatusNotice('正在唤起 macOS 原生语音备忘录...');
     try {
-      const res = await fetch(`${API_BASE}/launch-voice-memos`, { method: 'POST' });
+      const res = await apiFetch('/launch-voice-memos', { method: 'POST' });
       const data = await res.json();
       if (data.success) {
         setRecordingStatusNotice('✨ 已调起语音备忘录！录音完成后可点“📂 打开语音备忘录文件夹”直接拖选。');
@@ -177,7 +195,7 @@ export default function App() {
     setError('');
     setRecordingStatusNotice('正在 macOS 访达中定位并打开语音备忘录专属文件夹...');
     try {
-      const res = await fetch(`${API_BASE}/open-voice-memos-dir`, { method: 'POST' });
+      const res = await apiFetch('/open-voice-memos-dir', { method: 'POST' });
       const data = await res.json();
       if (data.success) {
         setRecordingStatusNotice('✨ 已在 macOS 访达中打开语音备忘录存储目录！可直接将其中的录音文件拖入软件窗口。');
@@ -205,7 +223,7 @@ export default function App() {
     setRecordingStatusNotice(`正在解析“${targetName}”并转为文本...`);
 
     try {
-      const res = await fetch(`${API_BASE}/transcribe-memo`, {
+      const res = await apiFetch('/transcribe-memo', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -248,7 +266,7 @@ export default function App() {
     formData.append('audioFile', file);
 
     try {
-      const res = await fetch(`${API_BASE}/transcribe-uploaded-audio`, {
+      const res = await apiFetch('/transcribe-uploaded-audio', {
         method: 'POST',
         body: formData
       });
@@ -304,37 +322,8 @@ export default function App() {
     // 2. 检查是否有 file:// 的 uri-list (针对某些版本的 Voice Memos 拖拽路径)
     const uriList = e.dataTransfer ? e.dataTransfer.getData('text/uri-list') : '';
     if (uriList && uriList.startsWith('file://')) {
-      try {
-        const decodedPath = decodeURIComponent(uriList.replace(/^file:\/\//, ''));
-        setIsTranscribing(true);
-        setError('');
-        setRecordingStatusNotice(`正在解析从语音备忘录拖入的文件...`);
-
-        fetch(`${API_BASE}/transcribe-memo`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            apiKey: customApiKey.trim() || undefined,
-            studentName: studentName.trim(),
-            memoPath: decodedPath
-          })
-        })
-        .then(res => res.json())
-        .then(data => {
-          if (data.success && data.transcript) {
-            const finalContent = applyTranscriptInsertion(data.transcript);
-            setTranscriptText(finalContent);
-            setRecordingStatusNotice(`🎉 从语音备忘录导入成功！已填入文本框。`);
-          } else {
-            setError(data.message || '从语音备忘录提取转写失败');
-          }
-        })
-        .catch(err => setError('拖拽解析失败: ' + err.message))
-        .finally(() => setIsTranscribing(false));
-
-      } catch (err) {
-        setError('拖拽路径解析失败');
-      }
+      setError('为保护本地文件安全，请使用“选择本地音频”或拖入实际文件，不能直接读取文件路径。');
+      setRecordingStatusNotice('');
     }
   };
 
@@ -363,7 +352,7 @@ export default function App() {
     formData.append('transcript', transcriptText.trim());
 
     try {
-      const response = await fetch(`${API_BASE}/generate-feedback`, {
+      const response = await apiFetch('/generate-feedback', {
         method: 'POST',
         body: formData,
       });
@@ -420,7 +409,7 @@ export default function App() {
     setReplaceNotice('正在根据您修正后的最新文本重新绘制 2K 知识海报...');
 
     try {
-      const response = await fetch(`${API_BASE}/regenerate-poster`, {
+      const response = await apiFetch('/regenerate-poster', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -507,7 +496,7 @@ export default function App() {
     setError('');
 
     try {
-      const res = await fetch(`${API_BASE}/generate-pdf`, {
+      const res = await apiFetch('/generate-pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
