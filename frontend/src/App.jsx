@@ -1236,7 +1236,7 @@ export default function App() {
 
       {/* 底部 Footer */}
       <footer style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', padding: '0.5rem 0', marginTop: 'auto', letterSpacing: '2px', fontWeight: '500' }}>
-        尘埃落定 · 始见星辰 | 反馈助手 v2.0 Pro Edition
+        尘埃落定 · 始见星辰 | 反馈助手 v3.0 Pro Edition
       </footer>
     </div>
   );

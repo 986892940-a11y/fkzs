@@ -12,9 +12,7 @@
 
 ## 🛠️ 项目结构
 - `docs/`
-  - `roles/`：系统角色定义（总控、前端、后端、UI设计师）
-  - `pitfalls_rules.md`：开发避坑规则库 (实时更新)
-  - `prompt.md`：调优后的系统大模型提示词
+  - `prompt.md`：运行时加载的系统大模型提示词
 - `backend/`：本地 Node.js (Express) 服务端
 - `frontend/`：Vite + React 网页前端
 - `recordings/`：本地音频存放目录
