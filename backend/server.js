@@ -41,9 +41,9 @@ const API_TOKEN = process.env.FEEDBACK_API_TOKEN || crypto.randomBytes(32).toStr
 const API_TOKEN_HEADER = 'x-feedback-token';
 const ALLOWED_ORIGINS = new Set(['http://localhost:5173', 'http://127.0.0.1:5173', 'null']);
 const MAX_UPLOAD_BYTES = 30 * 1024 * 1024;
-const MAX_PDF_IMAGE_COUNT = 3;
-const MAX_PDF_IMAGE_BYTES = 2 * 1024 * 1024;
-const MAX_PDF_TOTAL_BYTES = 5 * 1024 * 1024;
+const MAX_PDF_IMAGE_COUNT = 5;
+const MAX_PDF_IMAGE_BYTES = 10 * 1024 * 1024;
+const MAX_PDF_TOTAL_BYTES = 20 * 1024 * 1024;
 const requestWindows = new Map();
 
 function isAllowedOrigin(origin) {
@@ -86,12 +86,12 @@ function validatePdfImages(imagesBase64) {
   let totalBytes = 0;
   for (const image of imagesBase64) {
     if (typeof image !== 'string') return { valid: false, message: 'PDF 图片数据格式无效' };
-    const base64 = image.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/i, '');
-    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) return { valid: false, message: 'PDF 图片编码无效' };
+    const base64 = image.replace(/^data:image\/[a-zA-Z]+;base64,/i, '').replace(/\s+/g, '');
+    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) return { valid: false, message: 'PDF 图片编码格式不合规' };
     const byteLength = Math.floor((base64.length * 3) / 4);
-    if (byteLength > MAX_PDF_IMAGE_BYTES) return { valid: false, message: '单张 PDF 图片过大' };
+    if (byteLength > MAX_PDF_IMAGE_BYTES) return { valid: false, message: '单张 PDF 图片大小超出限制 (上限 10MB)' };
     totalBytes += byteLength;
-    if (totalBytes > MAX_PDF_TOTAL_BYTES) return { valid: false, message: 'PDF 图片总大小超出限制' };
+    if (totalBytes > MAX_PDF_TOTAL_BYTES) return { valid: false, message: 'PDF 图片总大小超出限制 (上限 20MB)' };
   }
   return { valid: true };
 }

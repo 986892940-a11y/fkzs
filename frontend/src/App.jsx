@@ -511,7 +511,12 @@ export default function App() {
       });
 
       if (!res.ok) {
-        throw new Error('服务器生成 PDF 失败');
+        let serverMsg = '服务器生成 PDF 失败';
+        try {
+          const errJson = await res.json();
+          if (errJson && errJson.message) serverMsg = errJson.message;
+        } catch (e) {}
+        throw new Error(serverMsg);
       }
 
       const blob = await res.blob();
@@ -565,6 +570,119 @@ export default function App() {
     return cleanText;
   };
 
+  const renderScoreDonutChart = (lines) => {
+    let totalScore = 95;
+    let score1 = 28, score2 = 38, score3 = 28;
+    let max1 = 30, max2 = 40, max3 = 30;
+
+    for (const l of lines) {
+      const clean = l.replace(/[\*#]/g, '');
+      if (clean.includes('综合得分') || clean.includes('总分')) {
+        const match = clean.match(/(\d{2,3})\s*[\/分]/);
+        if (match) totalScore = parseInt(match[1], 10);
+      } else if (clean.includes('听课专注') || clean.includes('专注与互动')) {
+        const match = clean.match(/(\d{1,2})\s*\/\s*(\d{1,2})/);
+        if (match) { score1 = parseInt(match[1], 10); max1 = parseInt(match[2], 10); }
+      } else if (clean.includes('考点理解') || clean.includes('理解力')) {
+        const match = clean.match(/(\d{1,2})\s*\/\s*(\d{1,2})/);
+        if (match) { score2 = parseInt(match[1], 10); max2 = parseInt(match[2], 10); }
+      } else if (clean.includes('当堂练习') || clean.includes('完成度')) {
+        const match = clean.match(/(\d{1,2})\s*\/\s*(\d{1,2})/);
+        if (match) { score3 = parseInt(match[1], 10); max3 = parseInt(match[2], 10); }
+      }
+    }
+
+    const p1 = Math.min(1, score1 / max1);
+    const p2 = Math.min(1, score2 / max2);
+    const p3 = Math.min(1, score3 / max3);
+
+    const circumference = 251.3;
+    const strokeWidth = 12;
+
+    const seg1Len = (max1 / 100) * circumference;
+    const seg2Len = (max2 / 100) * circumference;
+    const seg3Len = (max3 / 100) * circumference;
+
+    const gap = 4;
+    const s1 = Math.max(0, seg1Len - gap);
+    const s2 = Math.max(0, seg2Len - gap);
+    const s3 = Math.max(0, seg3Len - gap);
+
+    const rot1 = -90;
+    const rot2 = rot1 + (max1 / 100) * 360;
+    const rot3 = rot2 + (max2 / 100) * 360;
+
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '1.4rem',
+        background: 'rgba(246, 242, 233, 0.75)',
+        padding: '0.9rem 1.2rem',
+        borderRadius: 'var(--radius-sm)',
+        border: '1px solid #E2DACD',
+        margin: '0.4rem 0 0.8rem 0',
+        flexWrap: 'wrap'
+      }}>
+        {/* 左侧 SVG 典雅环形饼图 */}
+        <div style={{ position: 'relative', width: '96px', height: '96px', flexShrink: 0 }}>
+          <svg width="96" height="96" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="40" fill="none" stroke="#EAE4D7" strokeWidth={strokeWidth} />
+            <circle
+              cx="50" cy="50" r="40" fill="none" stroke="#8B5A42" strokeWidth={strokeWidth}
+              strokeDasharray={`${s1 * p1} ${circumference - s1 * p1}`}
+              strokeDashoffset="0" strokeLinecap="round"
+              transform={`rotate(${rot1} 50 50)`}
+            />
+            <circle
+              cx="50" cy="50" r="40" fill="none" stroke="#A6382B" strokeWidth={strokeWidth}
+              strokeDasharray={`${s2 * p2} ${circumference - s2 * p2}`}
+              strokeDashoffset="0" strokeLinecap="round"
+              transform={`rotate(${rot2} 50 50)`}
+            />
+            <circle
+              cx="50" cy="50" r="40" fill="none" stroke="#4F6F52" strokeWidth={strokeWidth}
+              strokeDasharray={`${s3 * p3} ${circumference - s3 * p3}`}
+              strokeDashoffset="0" strokeLinecap="round"
+              transform={`rotate(${rot3} 50 50)`}
+            />
+          </svg>
+          <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ fontSize: '1.3rem', fontWeight: '800', color: '#3D3B37', lineHeight: '1' }}>{totalScore}</span>
+            <span style={{ fontSize: '0.64rem', color: '#8B5A42', fontWeight: '600', marginTop: '2px' }}>综合得分</span>
+          </div>
+        </div>
+
+        {/* 右侧维度图例明细 */}
+        <div style={{ flex: 1, minWidth: '200px', display: 'flex', flexDirection: 'column', gap: '0.42rem', fontSize: '0.84rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#3D3B37', fontWeight: '600' }}>
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#8B5A42', display: 'inline-block' }}></span>
+              <span>听课专注与互动 (30分)</span>
+            </div>
+            <span style={{ fontWeight: '700', color: '#8B5A42' }}>{score1} / {max1}</span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#3D3B37', fontWeight: '600' }}>
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#A6382B', display: 'inline-block' }}></span>
+              <span>核心考点理解力 (40分)</span>
+            </div>
+            <span style={{ fontWeight: '700', color: '#A6382B' }}>{score2} / {max2}</span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#3D3B37', fontWeight: '600' }}>
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#4F6F52', display: 'inline-block' }}></span>
+              <span>当堂练习与完成度 (30分)</span>
+            </div>
+            <span style={{ fontWeight: '700', color: '#4F6F52' }}>{score3} / {max3}</span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderTextWithImageInBetween = () => {
     if (!generatedFeedback) return null;
 
@@ -581,6 +699,45 @@ export default function App() {
         recordLines.push(line);
       }
     }
+
+    // 解析 restLines 为分模块区块 (支持卡片化优雅渲染)
+    const sections = [];
+    let currentSec = null;
+
+    for (const line of restLines) {
+      const cleanL = line.replace(/[\*#]/g, '').trim();
+      const isHeader = (line.startsWith('## ') || line.startsWith('### ')) ||
+                       (cleanL.length < 20 && (
+                         cleanL.startsWith('课堂回顾') ||
+                         cleanL.startsWith('学生课堂综合打分') ||
+                         cleanL.startsWith('综合打分') ||
+                         cleanL.startsWith('综合评分') ||
+                         cleanL.startsWith('授课内容') ||
+                         cleanL.startsWith('典型例题') ||
+                         cleanL.startsWith('考点拆解') ||
+                         cleanL.startsWith('学员掌握情况') ||
+                         cleanL.startsWith('掌握情况') ||
+                         cleanL.startsWith('核心金句') ||
+                         cleanL.startsWith('名言积累') ||
+                         cleanL.startsWith('课后作业') ||
+                         cleanL.startsWith('作业') ||
+                         cleanL.startsWith('下节课程预告') ||
+                         cleanL.startsWith('课程预告')
+                       ));
+
+      if (isHeader) {
+        if (currentSec && currentSec.lines.length > 0) sections.push(currentSec);
+        let title = cleanL.replace(/：$/, '').trim();
+        currentSec = { title, lines: [] };
+      } else {
+        if (!currentSec) {
+          currentSec = { title: '课堂回顾', lines: [line] };
+        } else {
+          currentSec.lines.push(line);
+        }
+      }
+    }
+    if (currentSec && currentSec.lines.length > 0) sections.push(currentSec);
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.4rem' }}>
@@ -621,15 +778,65 @@ export default function App() {
           </div>
         )}
 
-        {restLines.length > 0 && (
-          <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.85', fontSize: '0.96rem' }}>
-            {restLines.map((l, idx) => (
-              <div key={idx} style={{ margin: '0.4rem 0', textIndent: (l.startsWith('#') || l.endsWith('：')) ? '0' : '1.5em' }}>
-                {renderFormattedMarkdownLine(l)}
+        {sections.map((sec, secIdx) => {
+          const isScoreSec = sec.title.includes('打分') || sec.title.includes('评分');
+          const isPreviewSec = sec.title.includes('下节课程预告') || sec.title.includes('预告');
+          
+          return (
+            <div key={secIdx} className="result-section-card" style={{
+              background: isScoreSec ? 'linear-gradient(135deg, rgba(246, 242, 233, 0.9), rgba(250, 247, 242, 0.95))' : (isPreviewSec ? 'rgba(79, 70, 229, 0.03)' : 'var(--panel-bg)'),
+              border: isScoreSec ? '1px solid #E2DACD' : (isPreviewSec ? '1px solid rgba(79, 70, 229, 0.2)' : '1px solid var(--panel-border)'),
+              borderRadius: 'var(--radius-md)',
+              padding: '1.25rem 1.4rem',
+              boxShadow: 'var(--card-shadow, 0 2px 8px rgba(0,0,0,0.02))'
+            }}>
+              {sec.title && (
+                <div style={{
+                  fontSize: '1.08rem',
+                  fontWeight: '700',
+                  color: isScoreSec ? '#8B5A42' : 'var(--primary)',
+                  marginBottom: '0.8rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '0.5rem'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <span>❖</span>
+                    <span>{sec.title}</span>
+                  </div>
+                  {isScoreSec && (
+                    <span style={{ fontSize: '0.78rem', background: '#FEF3C7', color: '#B45309', padding: '0.2rem 0.6rem', borderRadius: '12px', fontWeight: '600' }}>
+                      满分 100 分
+                    </span>
+                  )}
+                  {isPreviewSec && (
+                    <span style={{ fontSize: '0.78rem', background: 'rgba(79, 70, 229, 0.1)', color: 'var(--primary)', padding: '0.2rem 0.6rem', borderRadius: '12px', fontWeight: '600' }}>
+                      下阶段教学规划
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* 如果是打分模块，渲染古风 SVG 环形饼图 */}
+              {isScoreSec && renderScoreDonutChart(sec.lines)}
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', lineHeight: '1.85', fontSize: '0.96rem' }}>
+                {sec.lines.map((l, lIdx) => {
+                  const isScoreOverallLine = isScoreSec && (l.includes('综合得分') || l.includes('总分'));
+                  if (isScoreOverallLine) {
+                    return null; // 已经在饼图中心展示，跳过冗余文本行
+                  }
+                  return (
+                    <div key={lIdx} style={{ margin: '0.25rem 0' }}>
+                      {renderFormattedMarkdownLine(l)}
+                    </div>
+                  );
+                })}
               </div>
-            ))}
-          </div>
-        )}
+            </div>
+          );
+        })}
       </div>
     );
   };

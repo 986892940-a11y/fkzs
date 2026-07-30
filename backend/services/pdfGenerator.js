@@ -187,8 +187,12 @@ export function generateFeedbackPDF({
       // -------------------------------------------------------------
       const sections = parseSectionsAST(remainingLines);
       for (const sec of sections) {
-        // 动态识别：如果是“学员掌握情况”，自动切分为【左右并排双卡片】
-        if (sec.title && sec.title.includes('学员掌握情况')) {
+        // 动态识别：特殊模块切分与高质感卡片渲染
+        if (sec.title && (sec.title.includes('学生课堂综合打分') || sec.title.includes('综合打分') || sec.title.includes('综合评分'))) {
+          renderScoreCardAST(doc, startX, pageWidth, sec, checkPageOverflow);
+        } else if (sec.title && (sec.title.includes('下节课程预告') || sec.title.includes('课程预告'))) {
+          renderPreviewCardAST(doc, startX, pageWidth, sec, checkPageOverflow);
+        } else if (sec.title && sec.title.includes('学员掌握情况')) {
           renderDualColumnMasteryCard(doc, startX, pageWidth, sec, checkPageOverflow);
         } else {
           renderLiteratiCardAST(doc, startX, pageWidth, sec, checkPageOverflow);
@@ -571,15 +575,19 @@ function parseSectionsAST(lines) {
     const isTopModule = (line.length < 25) && (
       rawLine.startsWith('## ') ||
       line.startsWith('课堂回顾') ||
+      line.startsWith('学生课堂综合打分') ||
+      line.startsWith('综合打分') ||
       line.startsWith('授课内容') ||
       line.startsWith('典型例题') ||
       line.startsWith('考点拆解') ||
       line.startsWith('学员掌握情况') ||
       line.startsWith('掌握情况') ||
+      line.startsWith('核心金句') ||
+      line.startsWith('名言积累') ||
       line.startsWith('课后作业') ||
       line.startsWith('作业') ||
-      line.startsWith('核心金句') ||
-      line.startsWith('名言积累')
+      line.startsWith('下节课程预告') ||
+      line.startsWith('课程预告')
     );
 
     if (isTopModule) {
@@ -607,16 +615,220 @@ function parseSectionsAST(lines) {
 
 function parseImageBuffersList(imageBuffer, imagesBase64) {
   const list = [];
-  if (imageBuffer && Buffer.isBuffer(imageBuffer)) {
-    list.push(imageBuffer);
-  }
-  if (Array.isArray(imagesBase64)) {
-    for (const b64 of imagesBase64) {
-      if (b64) {
-        const cleanB64 = b64.replace(/^data:image\/\w+;base64,/, '');
-        list.push(Buffer.from(cleanB64, 'base64'));
+  const addBase64 = (str) => {
+    if (typeof str === 'string' && str.trim()) {
+      const cleanB64 = str.replace(/^data:image\/[a-zA-Z]+;base64,/i, '').replace(/\s+/g, '');
+      if (cleanB64) {
+        try {
+          list.push(Buffer.from(cleanB64, 'base64'));
+        } catch (e) {}
       }
     }
+  };
+
+  if (imageBuffer) {
+    if (Buffer.isBuffer(imageBuffer)) {
+      list.push(imageBuffer);
+    } else {
+      addBase64(imageBuffer);
+    }
   }
-  return list;
+
+  if (Array.isArray(imagesBase64)) {
+    for (const b64 of imagesBase64) {
+      addBase64(b64);
+    }
+  }
+
+  const uniqueBuffers = [];
+  const seenKeys = new Set();
+  for (const buf of list) {
+    const key = buf.length + '_' + buf.subarray(0, 50).toString('hex');
+    if (!seenKeys.has(key)) {
+      seenKeys.add(key);
+      uniqueBuffers.push(buf);
+    }
+  }
+  return uniqueBuffers;
+}
+
+/**
+ * 学生课堂综合打分卡片渲染器 (茶墨风矢量环形饼图 Literati Donut Chart)
+ */
+function renderScoreCardAST(doc, startX, pageWidth, sec, checkPageOverflow) {
+  const { title, lines } = sec;
+  const cleanLines = lines.filter(l => cleanMarkdownSymbols(l).length > 0);
+
+  // 1. 解析分数与三个维度得分
+  let totalScore = 95;
+  let score1 = 28, score2 = 38, score3 = 28;
+  let max1 = 30, max2 = 40, max3 = 30;
+
+  for (const l of cleanLines) {
+    const clean = cleanMarkdownSymbols(l);
+    if (clean.includes('综合得分') || clean.includes('总分')) {
+      const match = clean.match(/(\d{2,3})\s*[\/分]/);
+      if (match) totalScore = parseInt(match[1], 10);
+    } else if (clean.includes('听课专注') || clean.includes('专注与互动')) {
+      const match = clean.match(/(\d{1,2})\s*\/\s*(\d{1,2})/);
+      if (match) { score1 = parseInt(match[1], 10); max1 = parseInt(match[2], 10); }
+    } else if (clean.includes('考点理解') || clean.includes('理解力')) {
+      const match = clean.match(/(\d{1,2})\s*\/\s*(\d{1,2})/);
+      if (match) { score2 = parseInt(match[1], 10); max2 = parseInt(match[2], 10); }
+    } else if (clean.includes('当堂练习') || clean.includes('完成度')) {
+      const match = clean.match(/(\d{1,2})\s*\/\s*(\d{1,2})/);
+      if (match) { score3 = parseInt(match[1], 10); max3 = parseInt(match[2], 10); }
+    }
+  }
+
+  // 计算整体卡片预测高度 (饼图区 75pt + 文字明细)
+  doc.fontSize(9);
+  let textH = 0;
+  for (const l of cleanLines) {
+    const clean = cleanMarkdownSymbols(l);
+    if (clean.includes('综合得分') || clean.includes('总分')) continue;
+    const h = doc.heightOfString(clean, { width: pageWidth - 32, lineGap: 3 });
+    textH += h + 5;
+  }
+
+  const chartAreaH = 82;
+  const cardBodyH = chartAreaH + textH + 16;
+  const cardHeight = cardBodyH + 34;
+  checkPageOverflow(cardHeight);
+
+  const cardY = doc.y;
+  doc.fontSize(12).fillColor('#3D3B37');
+  doc.text(`❖  ${title || '学生课堂综合打分'}`, startX, cardY);
+
+  const bodyY = cardY + 18;
+  // 宣纸质感底框
+  doc.roundedRect(startX, bodyY, pageWidth, cardBodyH, 4).fill('#FAF7F2');
+  doc.roundedRect(startX, bodyY, pageWidth, cardBodyH, 4).strokeColor('#E2DACD').lineWidth(0.8).stroke();
+  doc.roundedRect(startX, bodyY, 3.5, cardBodyH, 1).fill('#8B5A42'); // 典雅茶墨左指示条
+
+  // -------------------------------------------------------------
+  // 2. 绘制 PDFKit 矢量茶墨风环形饼图 (Donut Chart)
+  // -------------------------------------------------------------
+  const donutCX = startX + 56;
+  const donutCY = bodyY + 42;
+  const outerR = 30;
+  const innerR = 19;
+
+  const p1 = Math.min(1, score1 / max1);
+  const p2 = Math.min(1, score2 / max2);
+  const p3 = Math.min(1, score3 / max3);
+
+  const angle1 = (max1 / 100) * 360 * p1;
+  const angle2 = (max2 / 100) * 360 * p2;
+  const angle3 = (max3 / 100) * 360 * p3;
+
+  const startA1 = -90;
+  const endA1 = startA1 + Math.max(2, angle1 - 2);
+  const startA2 = startA1 + (max1 / 100) * 360;
+  const endA2 = startA2 + Math.max(2, angle2 - 2);
+  const startA3 = startA2 + (max2 / 100) * 360;
+  const endA3 = startA3 + Math.max(2, angle3 - 2);
+
+  // 辅助画扇区函数
+  const drawPieSector = (cx, cy, r, sDeg, eDeg, color) => {
+    const sRad = (sDeg * Math.PI) / 180;
+    const eRad = (eDeg * Math.PI) / 180;
+    const x1 = cx + r * Math.cos(sRad);
+    const y1 = cy + r * Math.sin(sRad);
+    doc.save();
+    doc.fillColor(color);
+    doc.moveTo(cx, cy);
+    doc.lineTo(x1, y1);
+    doc.arc(cx, cy, r, sDeg, eDeg);
+    doc.lineTo(cx, cy);
+    doc.fill();
+    doc.restore();
+  };
+
+  // 绘制 3 个维度的古风扇区 (熟褐 / 朱砂 / 黛绿)
+  drawPieSector(donutCX, donutCY, outerR, startA1, endA1, '#8B5A42');
+  drawPieSector(donutCX, donutCY, outerR, startA2, endA2, '#A6382B');
+  drawPieSector(donutCX, donutCY, outerR, startA3, endA3, '#4F6F52');
+
+  // 绘制中心遮罩圆，形成 Donut 环形
+  doc.save();
+  doc.circle(donutCX, donutCY, innerR).fill('#FAF7F2');
+  doc.restore();
+
+  // 中心综合得分数字
+  doc.fontSize(12).fillColor('#3D3B37').text(`${totalScore}`, donutCX - 15, donutCY - 9, { width: 30, align: 'center' });
+  doc.fontSize(6.5).fillColor('#8B5A42').text('综合得分', donutCX - 18, donutCY + 4, { width: 36, align: 'center' });
+
+  // -------------------------------------------------------------
+  // 3. 饼图右侧维度图例明细
+  // -------------------------------------------------------------
+  const legendX = startX + 104;
+  let legendY = bodyY + 14;
+
+  const drawLegendItem = (color, label, scoreVal, maxVal, yPos) => {
+    doc.save();
+    doc.circle(legendX + 4, yPos + 4, 3.5).fill(color);
+    doc.restore();
+    doc.fontSize(9).fillColor('#3D3B37').text(label, legendX + 13, yPos, { lineBreak: false });
+    doc.fontSize(9.5).fillColor(color).text(`${scoreVal} / ${maxVal}`, legendX + 260, yPos, { width: 60, align: 'right' });
+  };
+
+  drawLegendItem('#8B5A42', '听课专注与互动 (30分)', score1, max1, legendY);
+  drawLegendItem('#A6382B', '核心考点理解力 (40分)', score2, max2, legendY + 20);
+  drawLegendItem('#4F6F52', '当堂练习与完成度 (30分)', score3, max3, legendY + 40);
+
+  // 分隔虚线
+  doc.strokeColor('#EAE4D7').lineWidth(0.6).dash(3, { space: 3 }).moveTo(startX + 14, bodyY + chartAreaH).lineTo(startX + pageWidth - 14, bodyY + chartAreaH).stroke();
+  doc.undash();
+
+  // -------------------------------------------------------------
+  // 4. 详细评语明细
+  // -------------------------------------------------------------
+  let curY = bodyY + chartAreaH + 10;
+  for (const l of cleanLines) {
+    const clean = cleanMarkdownSymbols(l);
+    if (clean.includes('综合得分') || clean.includes('总分')) continue;
+    renderParagraphWithColonBold(doc, l, startX + 14, curY, pageWidth - 28, 8.8, '#3D3B37', false);
+    const h = doc.heightOfString(clean, { width: pageWidth - 28, lineGap: 3 });
+    curY += h + 5;
+  }
+
+  doc.y = bodyY + cardBodyH + 18;
+}
+
+/**
+ * 下节课程预告卡片渲染器
+ */
+function renderPreviewCardAST(doc, startX, pageWidth, sec, checkPageOverflow) {
+  const { title, lines } = sec;
+  const cleanLines = lines.filter(l => cleanMarkdownSymbols(l).length > 0);
+
+  doc.fontSize(9);
+  let bodyH = 0;
+  for (const l of cleanLines) {
+    const clean = cleanMarkdownSymbols(l);
+    const h = doc.heightOfString(clean, { width: pageWidth - 32, lineGap: 3 });
+    bodyH += h + 6;
+  }
+  const cardHeight = Math.max(45, bodyH + 34);
+  checkPageOverflow(cardHeight);
+
+  const cardY = doc.y;
+  doc.fontSize(12).fillColor('#3D3B37');
+  doc.text(`❖  ${title || '下节课程预告'}`, startX, cardY);
+
+  const bodyY = cardY + 18;
+  doc.roundedRect(startX, bodyY, pageWidth, bodyH + 16, 4).fill('#FAF7F2');
+  doc.roundedRect(startX, bodyY, pageWidth, bodyH + 16, 4).strokeColor('#E2DACD').lineWidth(0.8).stroke();
+  doc.roundedRect(startX, bodyY, 3.5, bodyH + 16, 1).fill('#3D3B37');
+
+  let curY = bodyY + 10;
+  for (const l of cleanLines) {
+    const clean = cleanMarkdownSymbols(l);
+    renderParagraphWithColonBold(doc, l, startX + 14, curY, pageWidth - 28, 9, '#3D3B37', false);
+    const h = doc.heightOfString(clean, { width: pageWidth - 28, lineGap: 3 });
+    curY += h + 6;
+  }
+
+  doc.y = bodyY + bodyH + 26;
 }
